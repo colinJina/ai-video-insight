@@ -79,17 +79,19 @@ class MockAiProvider implements AIProvider {
   async chatWithVideoContext(input: ChatWithVideoContextInput) {
     const lead = input.analysis.outline[0];
     const related = input.analysis.outline[1] ?? input.analysis.outline[0];
+    const leadText = lead
+      ? `${lead.time ? `${lead.time} 的` : ""}“${lead.text}”`
+      : "";
+    const relatedText = related
+      ? related.time
+        ? `${related.time} 这一段`
+        : "相关片段"
+      : "";
 
     return trimText(
       `基于当前转写，我的判断是：${input.analysis.summary} ${
-        lead
-          ? `如果你想快速回看，建议先看 ${lead.time} 的“${lead.text}”。`
-          : ""
-      } ${
-        related
-          ? `补充理解时，可以再结合 ${related.time} 这一段。`
-          : ""
-      }`,
+        lead ? `如果你想快速回看，建议先看 ${leadText}。` : ""
+      } ${related ? `补充理解时，可以再结合 ${relatedText}。` : ""}`,
       320,
     );
   }
@@ -172,7 +174,7 @@ class HttpAiProvider implements AIProvider {
       { role: "user", content: buildChatUserPrompt(input) },
     ]);
 
-    return raw.trim() || "我暂时没有拿到足够稳定的回答，请换个问法再试一次。";
+    return raw.trim() || "我暂时没拿到足够稳定的回答，请换个问法再试一次。";
   }
 }
 

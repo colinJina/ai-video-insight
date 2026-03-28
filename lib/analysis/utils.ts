@@ -128,8 +128,8 @@ export function prettifyTitleFromUrl(url: URL, provider: VideoProvider) {
   return `${toHostLabel(url.hostname)} 视频`;
 }
 
-export function formatTimestamp(totalSeconds: number) {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+export function formatTimestamp(totalSeconds: number | null | undefined) {
+  if (typeof totalSeconds !== "number" || !Number.isFinite(totalSeconds) || totalSeconds <= 0) {
     return "00:00";
   }
 
@@ -139,7 +139,7 @@ export function formatTimestamp(totalSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function coerceTimestamp(value: unknown, fallback: string) {
+export function coerceTimestamp(value: unknown, fallback: string | null) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return formatTimestamp(value);
   }
@@ -161,6 +161,18 @@ export function coerceTimestamp(value: unknown, fallback: string) {
   return fallback;
 }
 
+export function normalizeDurationSeconds(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return value;
+}
+
+export function hasUsableTimestamp(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 export function pickStringArray(value: unknown, limit: number) {
   if (!Array.isArray(value)) {
     return [];
@@ -178,7 +190,12 @@ export function buildTranscriptExcerpt(
 ) {
   return trimText(
     segments
-      .map((segment) => `[${formatTimestamp(segment.startSeconds)}] ${segment.text}`)
+      .map((segment) => {
+        const startSeconds = segment.startSeconds;
+        return hasUsableTimestamp(startSeconds)
+          ? `[${formatTimestamp(startSeconds)}] ${segment.text}`
+          : segment.text;
+      })
       .join(" "),
     maxLength,
   );

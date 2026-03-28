@@ -5,6 +5,7 @@ import { useState } from "react";
 import type {
   AnalysisPublicTask,
   AnalysisViewStatus,
+  OutlineItem,
 } from "@/lib/analysis/types";
 
 export type AiPanelTab = "summary" | "outline" | "chat";
@@ -29,11 +30,21 @@ const tabs: TabOption[] = [
   { id: "chat", label: "AI 对话" },
 ];
 
-function parseTimestamp(value: string) {
-  return value
-    .split(":")
-    .map((part) => Number(part))
-    .reduce((total, part) => total * 60 + part, 0);
+function parseTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parts = value.split(":").map((part) => Number(part));
+  if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) {
+    return null;
+  }
+
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+function hasUsableOutlineTime(outline: OutlineItem[]) {
+  return outline.some((item) => item.time);
 }
 
 function SectionTitle({ children }: { children: string }) {
@@ -106,29 +117,48 @@ function OutlinePanel({
     return null;
   }
 
+  const canSeekByTime = hasUsableOutlineTime(analysis.result.outline);
+
   return (
     <section>
       <SectionTitle>关键时间点</SectionTitle>
+
+      {!canSeekByTime || analysis.transcriptSource === "mock" ? (
+        <div className="mb-5 rounded-2xl border border-[color:rgba(255,127,0,0.18)] bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-[color:var(--text-muted)]">
+          当前结果没有稳定的真实时间轴，这里的条目只作为内容摘要，不建议把它当成精确跳转点。
+        </div>
+      ) : null}
+
       <div className="space-y-4">
         {analysis.result.outline.map((item) => {
           const timeInSeconds = parseTimestamp(item.time);
+          const isClickable = typeof timeInSeconds === "number";
 
           return (
             <div
-              key={`${item.time}-${item.text}`}
-              className="group flex cursor-pointer gap-4"
-              onClick={() => onOutlineClick(timeInSeconds)}
+              key={`${item.time ?? "no-time"}-${item.text}`}
+              className={`group flex gap-4 ${
+                isClickable ? "cursor-pointer" : "cursor-default"
+              }`}
+              onClick={() => {
+                if (typeof timeInSeconds === "number") {
+                  onOutlineClick(timeInSeconds);
+                }
+              }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
+                if (
+                  typeof timeInSeconds === "number" &&
+                  (event.key === "Enter" || event.key === " ")
+                ) {
                   event.preventDefault();
                   onOutlineClick(timeInSeconds);
                 }
               }}
-              role="button"
-              tabIndex={0}
+              role={isClickable ? "button" : undefined}
+              tabIndex={isClickable ? 0 : undefined}
             >
               <span className="pt-1 font-headline text-xs text-[color:var(--primary-strong)]">
-                {item.time}
+                {item.time ?? "无时间"}
               </span>
               <div className="flex-1 border-l border-[color:rgba(88,66,53,0.2)] py-1 pl-4 text-sm leading-6 text-foreground transition-all group-hover:border-[color:var(--primary-strong)] group-hover:bg-[color:rgba(255,127,0,0.05)]">
                 {item.text}
@@ -236,7 +266,7 @@ function ChatPanel({
           className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 pr-12 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(88,66,53,1)] focus:border-[color:var(--primary-strong)]"
           disabled={isChatPending}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="继续追问这段视频的内容…"
+          placeholder="继续追问这段视频的内容"
           type="text"
           value={draft}
         />
@@ -286,7 +316,7 @@ export default function AiPanel({
     if (viewStatus === "error") {
       return (
         <EmptyState
-          description={analysis?.errorMessage ?? "本次分析未成功完成，请调整链接后重试。"}
+          description={analysis?.errorMessage ?? "本次分析未能成功完成，请调整链接后重试。"}
           title="分析失败"
         />
       );
@@ -299,7 +329,7 @@ export default function AiPanel({
     if (!analysis || viewStatus !== "success" || !analysis.result) {
       return (
         <EmptyState
-          description="分析完成后，这里会展示可点击的时间大纲，并支持同步跳转视频时间点。"
+          description="分析完成后，这里会展示可点击的时间大纲；如果当前来源没有真实时间轴，也会明确标记。"
           title="暂无时间大纲"
         />
       );

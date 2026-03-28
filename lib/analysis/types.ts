@@ -30,11 +30,12 @@ export interface VideoSource {
   description: string | null;
   posterUrl: string | null;
   playableUrl: string | null;
+  durationSeconds: number | null;
 }
 
 export interface TranscriptSegment {
-  startSeconds: number;
-  endSeconds: number;
+  startSeconds: number | null;
+  endSeconds: number | null;
   text: string;
 }
 
@@ -46,7 +47,7 @@ export interface TranscriptData {
 }
 
 export interface OutlineItem {
-  time: string;
+  time: string | null;
   text: string;
 }
 

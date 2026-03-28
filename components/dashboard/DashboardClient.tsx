@@ -60,13 +60,30 @@ function getSafeExternalUrl(value: string | null | undefined) {
   return null;
 }
 
+function formatDurationLabel(durationSeconds: number | null | undefined) {
+  if (typeof durationSeconds !== "number" || !Number.isFinite(durationSeconds)) {
+    return "时长暂不可用";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(durationSeconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `时长：${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `时长：${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function buildStatusMessage(
   viewStatus: AnalysisViewStatus,
   analysis: AnalysisPublicTask | null,
   errorMessage: string | null,
 ) {
   if (viewStatus === "submitting") {
-    return "正在创建分析任务，请稍候…";
+    return "正在创建分析任务，请稍候。";
   }
 
   if (viewStatus === "processing") {
@@ -74,7 +91,10 @@ function buildStatusMessage(
   }
 
   if (viewStatus === "success" && analysis?.result) {
-    return `分析完成，已生成 ${analysis.result.outline.length} 条时间大纲和 ${analysis.result.keyPoints.length} 条关键要点。`;
+    const usableTimeline = analysis.result.outline.filter((item) => item.time).length;
+    return usableTimeline > 0
+      ? `分析完成，已生成 ${usableTimeline} 个可定位时间点和 ${analysis.result.keyPoints.length} 条关键要点。`
+      : `分析完成，已生成 ${analysis.result.keyPoints.length} 条关键要点；当前来源没有稳定的真实时间轴。`;
   }
 
   if (viewStatus === "error") {
@@ -96,6 +116,10 @@ function buildVideoMetrics(
         : "支持 HTTP / HTTPS 视频链接",
     },
     {
+      icon: "schedule",
+      label: formatDurationLabel(analysis?.video.durationSeconds),
+    },
+    {
       icon: "play_circle",
       label: previewVideoUrl
         ? "当前链接支持页面内预览"
@@ -105,17 +129,14 @@ function buildVideoMetrics(
       icon: "text_snippet",
       label: analysis?.transcriptSource
         ? `转写来源：${
-            analysis.transcriptSource === "mock" ? "Mock Transcript" : "远程字幕"
+            analysis.transcriptSource === "mock" ? "Mock Transcript" : "远程 Transcript"
           }`
         : "尚未生成转写内容",
     },
   ];
 }
 
-async function requestJson<T>(
-  input: string,
-  init?: RequestInit,
-): Promise<T> {
+async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     cache: "no-store",
     ...init,
@@ -266,17 +287,13 @@ export default function DashboardClient() {
     analysis?.video.playableUrl ??
     (looksLikeDirectVideoUrl(videoUrl) ? videoUrl.trim() : null);
   const posterUrl = analysis?.video.posterUrl ?? null;
-  const sourceUrl = getSafeExternalUrl(
-    analysis?.video.normalizedUrl ?? videoUrl.trim(),
-  );
+  const sourceUrl = getSafeExternalUrl(analysis?.video.normalizedUrl ?? videoUrl.trim());
   const title =
-    analysis?.result?.title ??
-    analysis?.video.title ??
-    "输入视频链接，开始生成视频摘要";
+    analysis?.result?.title ?? analysis?.video.title ?? "输入视频链接，开始生成视频摘要";
   const description =
     analysis?.result?.summary ??
     analysis?.video.description ??
-    "服务端会校验链接、抽取基础信息、获取字幕或模拟转写，并生成结构化概要与问答上下文。";
+    "服务端会校验链接、抽取基础信息、获取字幕或真实转写，并生成结构化概要与问答上下文。";
   const statusMessage = buildStatusMessage(viewStatus, analysis, errorMessage);
   const metrics = buildVideoMetrics(analysis, previewVideoUrl);
 
@@ -287,6 +304,7 @@ export default function DashboardClient() {
         <div className="w-full lg:w-[62%]">
           <VideoSection
             ref={videoRef}
+            authoritativeDurationSeconds={analysis?.video.durationSeconds ?? null}
             description={description}
             metrics={metrics}
             onAnalyze={handleAnalyze}

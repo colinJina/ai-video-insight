@@ -63,6 +63,7 @@ type VideoMetric = {
 };
 
 type VideoSectionProps = {
+  authoritativeDurationSeconds?: number | null;
   description: string;
   metrics: VideoMetric[];
   onAnalyze: () => void | Promise<void>;
@@ -96,6 +97,7 @@ function formatTime(timeInSeconds: number) {
 const VideoSection = forwardRef<VideoSectionHandle, VideoSectionProps>(
   (
     {
+      authoritativeDurationSeconds,
       description,
       metrics,
       onAnalyze,
@@ -121,8 +123,16 @@ const VideoSection = forwardRef<VideoSectionHandle, VideoSectionProps>(
     const [playbackRate, setPlaybackRate] = useState(1);
 
     const hasPlayableVideo = Boolean(videoSrc);
+    const displayedDuration =
+      typeof authoritativeDurationSeconds === "number" &&
+      Number.isFinite(authoritativeDurationSeconds) &&
+      authoritativeDurationSeconds >= 0
+        ? authoritativeDurationSeconds
+        : duration;
     const progressPercent =
-      duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
+      displayedDuration > 0
+        ? Math.min((currentTime / displayedDuration) * 100, 100)
+        : 0;
     const statusMeta = STATUS_META[status];
     const isBusy = status === "submitting" || status === "processing";
 
@@ -387,7 +397,7 @@ const VideoSection = forwardRef<VideoSectionHandle, VideoSectionProps>(
               <div
                 ref={progressRef}
                 aria-label="Video progress"
-                aria-valuemax={Math.round(duration)}
+                aria-valuemax={Math.round(displayedDuration)}
                 aria-valuemin={0}
                 aria-valuenow={Math.round(currentTime)}
                 className="mb-5 h-1 w-full cursor-pointer rounded-full bg-[color:rgba(88,66,53,0.3)]"
@@ -452,7 +462,7 @@ const VideoSection = forwardRef<VideoSectionHandle, VideoSectionProps>(
                     {isMuted ? "volume_off" : "volume_up"}
                   </span>
                   <span className="font-headline text-[11px] uppercase tracking-[0.24em] text-[color:rgba(223,192,175,0.72)]">
-                    {formatTime(currentTime)} / {formatTime(duration)}
+                    {formatTime(currentTime)} / {formatTime(displayedDuration)}
                   </span>
                 </div>
 

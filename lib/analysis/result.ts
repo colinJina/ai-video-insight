@@ -7,6 +7,7 @@ import type {
 import {
   coerceTimestamp,
   formatTimestamp,
+  hasUsableTimestamp,
   isRecord,
   normalizeWhitespace,
   pickStringArray,
@@ -19,17 +20,22 @@ function segmentToOutlineText(segment: TranscriptSegment) {
 
 function buildDefaultQuestions(title: string) {
   return [
-    `这段关于《${title}》的视频最重要的结论是什么？`,
+    `这段关于“${title}”的视频最重要的结论是什么？`,
     "如果我要快速回看，应该优先看哪几个时间点？",
     "这段内容里有哪些可以直接落地的做法？",
   ];
 }
 
+function formatOutlineTime(segment: TranscriptSegment) {
+  const startSeconds = segment.startSeconds;
+  return hasUsableTimestamp(startSeconds) ? formatTimestamp(startSeconds) : null;
+}
+
 export function buildFallbackStructuredSummary(
   input: GenerateVideoSummaryInput,
 ): StructuredVideoSummary {
-  const outline = input.transcript.segments.slice(0, 6).map((segment, index) => ({
-    time: formatTimestamp(segment.startSeconds || index * 90),
+  const outline = input.transcript.segments.slice(0, 6).map((segment) => ({
+    time: formatOutlineTime(segment),
     text: segmentToOutlineText(segment),
   }));
 
@@ -75,9 +81,18 @@ function parseJsonObject(raw: string) {
   }
 }
 
+function createValidOutlineTimes(input: GenerateVideoSummaryInput) {
+  return new Set(
+    input.transcript.segments
+      .map((segment) => formatOutlineTime(segment))
+      .filter((time): time is string => typeof time === "string"),
+  );
+}
+
 export function normalizeStructuredSummary(
   value: unknown,
   fallback: StructuredVideoSummary,
+  validOutlineTimes: Set<string>,
 ): StructuredVideoSummary {
   if (!isRecord(value)) {
     return fallback;
@@ -90,8 +105,7 @@ export function normalizeStructuredSummary(
         return null;
       }
 
-      const fallbackTime =
-        fallback.outline[index]?.time ?? formatTimestamp(index * 90);
+      const fallbackTime = fallback.outline[index]?.time ?? null;
       const text =
         typeof item.text === "string" ? normalizeWhitespace(item.text) : "";
 
@@ -99,8 +113,14 @@ export function normalizeStructuredSummary(
         return null;
       }
 
+      const candidateTime = coerceTimestamp(item.time, fallbackTime);
+      const normalizedTime =
+        candidateTime && validOutlineTimes.has(candidateTime)
+          ? candidateTime
+          : fallbackTime;
+
       return {
-        time: coerceTimestamp(item.time, fallbackTime),
+        time: normalizedTime,
         text: trimText(text, 88),
       };
     })
@@ -135,7 +155,7 @@ export function safeParseStructuredSummary(
   const fallback = buildFallbackStructuredSummary(input);
   const parsed = parseJsonObject(raw);
 
-  return normalizeStructuredSummary(parsed, fallback);
+  return normalizeStructuredSummary(parsed, fallback, createValidOutlineTimes(input));
 }
 
 export function buildAnalysisResult(
