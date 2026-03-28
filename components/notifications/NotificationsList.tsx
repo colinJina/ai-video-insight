@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import MetricTile from "@/components/app/MetricTile";
 import type { AppNotification } from "@/lib/app/types";
 
 const TYPE_META = {
@@ -39,6 +40,13 @@ export default function NotificationsList({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const unreadCount = notifications.filter((item) => !item.readAt).length;
+  const completedCount = notifications.filter(
+    (item) => item.type === "analysis_completed",
+  ).length;
+  const failedCount = notifications.filter(
+    (item) => item.type === "analysis_failed",
+  ).length;
 
   const markAllAsRead = async () => {
     setError(null);
@@ -90,13 +98,19 @@ export default function NotificationsList({
 
   return (
     <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricTile hint="仍会显示在导航栏角标" label="未读" value={String(unreadCount)} />
+        <MetricTile hint="已完成的分析提醒" label="完成通知" value={String(completedCount)} />
+        <MetricTile hint="需要回看的失败提醒" label="失败通知" value={String(failedCount)} />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[color:var(--text-muted)]">
           共 {notifications.length} 条通知，未读会同步显示在导航栏。
         </p>
         <button
           className="rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-2 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)] disabled:opacity-60"
-          disabled={isPending}
+          disabled={isPending || unreadCount === 0}
           onClick={() => {
             void markAllAsRead();
           }}
@@ -143,6 +157,16 @@ export default function NotificationsList({
                     <p className="mt-4 text-xs text-[color:rgba(223,192,175,0.72)]">
                       {formatDate(notification.createdAt)}
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[color:rgba(88,66,53,0.22)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--text-muted)]">
+                        {notification.readAt ? "已读" : "未读"}
+                      </span>
+                      {notification.relatedAnalysisId ? (
+                        <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+                          关联分析
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 {!notification.readAt ? (

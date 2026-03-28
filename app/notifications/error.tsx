@@ -1,0 +1,38 @@
+"use client";
+
+import Link from "next/link";
+
+import PageErrorState from "@/components/app/PageErrorState";
+import PageHeader from "@/components/app/PageHeader";
+
+export default function NotificationsError({
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <main className="page-shell min-h-screen">
+      <div className="mx-auto w-full max-w-[1280px] px-4 pb-24 pt-24 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <Link
+            className="inline-flex rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-2.5 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)]"
+            href="/notifications"
+          >
+            返回通知中心
+          </Link>
+        </div>
+        <PageHeader
+          description="通知中心数据加载失败。你可以立即重试。"
+          eyebrow="Notifications"
+          title="通知中心暂时不可用"
+        />
+        <PageErrorState
+          description="如果问题持续存在，请检查通知接口和当前登录态。"
+          onRetry={reset}
+          title="这次没有成功取回通知"
+        />
+      </div>
+    </main>
+  );
+}
