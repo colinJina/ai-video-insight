@@ -95,6 +95,11 @@ Notes:
   - 第三方 AI 模型名
 - `AI_TIMEOUT_MS`
   - AI 请求超时时间，默认 `25000`
+- `TRANSCRIPT_TIMEOUT_MS`
+  - 转写阶段基础超时时间，默认 `120000`
+  - AssemblyAI 会在这个基础上，按视频时长自动放宽等待时间，最长放宽到 `15` 分钟
+- `TRANSCRIPT_POLL_INTERVAL_MS`
+  - 转写轮询间隔，默认 `3000`
 - `TRANSCRIPT_PROVIDER`
 - `ANALYSIS_MOCK_DELAY_MS`
   - 可选。用于本地演示时延长 mock transcript 的处理时间，方便看到 `processing` 状态

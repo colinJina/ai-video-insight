@@ -234,6 +234,9 @@ function joinUrl(baseUrl: string, path: string) {
 class AssemblyAiTranscriptProvider implements TranscriptProvider {
   readonly kind = "remote" as const;
 
+  private static readonly MAX_PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;
+  private static readonly POLL_REQUEST_TIMEOUT_MS = 30 * 1000;
+
   private readonly transcriptEndpoint: string;
   private readonly uploadEndpoint: string;
 
@@ -256,6 +259,23 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
     };
   }
 
+  private getProcessingTimeoutMs(video: VideoSource) {
+    if (
+      typeof video.durationSeconds !== "number" ||
+      !Number.isFinite(video.durationSeconds) ||
+      video.durationSeconds <= 0
+    ) {
+      return this.timeoutMs;
+    }
+
+    const durationScaledTimeoutMs = Math.ceil(video.durationSeconds * 1000 * 0.75) + 60_000;
+
+    return Math.min(
+      Math.max(this.timeoutMs, durationScaledTimeoutMs),
+      AssemblyAiTranscriptProvider.MAX_PROCESSING_TIMEOUT_MS,
+    );
+  }
+
   private async uploadLocalMedia(filePath: string, contentType?: string) {
     return uploadFileToUrl(
       this.uploadEndpoint,
@@ -268,7 +288,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
     );
   }
 
-  private async submitTranscript(audioUrl: string) {
+  private async submitTranscript(audioUrl: string, timeoutMs: number) {
     const response = await fetchWithTimeout(
       this.transcriptEndpoint,
       {
@@ -284,7 +304,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
           speaker_labels: true,
         }),
       },
-      this.timeoutMs,
+      timeoutMs,
     );
 
     const rawBody = await response.text();
@@ -316,11 +336,15 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
     return body.id;
   }
 
-  private async pollTranscript(id: string) {
+  private async pollTranscript(id: string, timeoutMs: number) {
     const pollingEndpoint = joinUrl(this.transcriptEndpoint, id);
     const startedAt = Date.now();
+    const pollRequestTimeoutMs = Math.min(
+      timeoutMs,
+      AssemblyAiTranscriptProvider.POLL_REQUEST_TIMEOUT_MS,
+    );
 
-    while (Date.now() - startedAt < this.timeoutMs) {
+    while (Date.now() - startedAt < timeoutMs) {
       const response = await fetchWithTimeout(
         pollingEndpoint,
         {
@@ -328,7 +352,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
             Authorization: this.apiKey,
           },
         },
-        this.timeoutMs,
+        pollRequestTimeoutMs,
       );
 
       const rawBody = await response.text();
@@ -375,6 +399,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
 
   async getTranscript({ video }: { video: VideoSource }): Promise<TranscriptData> {
     try {
+      const processingTimeoutMs = this.getProcessingTimeoutMs(video);
       const prepared = await prepareTranscriptMedia(
         video,
         async ({ filePath, contentType }) =>
@@ -382,8 +407,14 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
       );
 
       try {
-        const transcriptId = await this.submitTranscript(prepared.audioUrl);
-        const transcript = await this.pollTranscript(transcriptId);
+        const transcriptId = await this.submitTranscript(
+          prepared.audioUrl,
+          processingTimeoutMs,
+        );
+        const transcript = await this.pollTranscript(
+          transcriptId,
+          processingTimeoutMs,
+        );
 
         return {
           source: "remote",
