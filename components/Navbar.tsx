@@ -1,8 +1,8 @@
 import Image from "next/image";
 
 const navItems = [
-  { label: "画廊", active: false },
-  { label: "模型", active: true },
+  { label: "总览", active: false },
+  { label: "分析台", active: true },
   { label: "资料库", active: false },
   { label: "归档", active: false },
 ];
