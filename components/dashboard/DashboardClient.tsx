@@ -92,6 +92,11 @@ function buildStatusMessage(
 
   if (viewStatus === "success" && analysis?.result) {
     const usableTimeline = analysis.result.outline.filter((item) => item.time).length;
+
+    if (analysis.transcriptSource === "mock") {
+      return "分析已完成，但当前仍在使用 mock transcript，所以摘要不是基于这条视频的真实转写内容。";
+    }
+
     return usableTimeline > 0
       ? `分析完成，已生成 ${usableTimeline} 个可定位时间点和 ${analysis.result.keyPoints.length} 条关键要点。`
       : `分析完成，已生成 ${analysis.result.keyPoints.length} 条关键要点；当前来源没有稳定的真实时间轴。`;
@@ -129,7 +134,7 @@ function buildVideoMetrics(
       icon: "text_snippet",
       label: analysis?.transcriptSource
         ? `转写来源：${
-            analysis.transcriptSource === "mock" ? "Mock Transcript" : "远程 Transcript"
+            analysis.transcriptSource === "mock" ? "Mock Transcript" : "Remote Transcript"
           }`
         : "尚未生成转写内容",
     },

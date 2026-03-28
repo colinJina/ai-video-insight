@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  outputFileTracingIncludes: {
+    "/api/analyze": ["./bin/yt-dlp"],
+    "/api/analysis/[id]": ["./bin/yt-dlp"],
+  },
 };
 
 export default nextConfig;

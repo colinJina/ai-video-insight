@@ -1,4 +1,8 @@
 import { ExternalServiceError } from "@/lib/analysis/errors";
+import {
+  prepareTranscriptMedia,
+  uploadFileToUrl,
+} from "@/lib/analysis/media-resolver";
 import type {
   TranscriptData,
   TranscriptProvider,
@@ -14,6 +18,9 @@ import {
   sleep,
   trimText,
 } from "@/lib/analysis/utils";
+
+const DEFAULT_ASSEMBLYAI_BASE_URL = "https://api.assemblyai.com";
+const DEFAULT_POLL_INTERVAL_MS = 3000;
 
 function buildMockTranscriptSegments(video: VideoSource): TranscriptSegment[] {
   const title = trimText(video.title, 40);
@@ -157,50 +164,124 @@ function normalizeRemoteTranscriptPayload(payload: unknown): RemoteTranscriptRes
   };
 }
 
-function resolveTranscriptEndpoint(baseUrl: string) {
-  const url = new URL(baseUrl);
-  const trimmedPath = url.pathname.replace(/\/$/, "");
+function millisecondsToSeconds(value: unknown) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric / 1000 : null;
+}
 
-  if (trimmedPath === "" || trimmedPath === "/" || trimmedPath.endsWith("/v1")) {
-    url.pathname = `${trimmedPath}/transcripts`.replace("//", "/");
+function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse {
+  if (!isRecord(payload)) {
+    throw new ExternalServiceError("AssemblyAI 返回了无法解析的响应。");
   }
 
+  const utterances = Array.isArray(payload.utterances) ? payload.utterances : [];
+  const words = Array.isArray(payload.words) ? payload.words : [];
+  const sourceItems = utterances.length > 0 ? utterances : words;
+  const segments = sourceItems
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const text = typeof item.text === "string" ? normalizeWhitespace(item.text) : "";
+      if (!text) {
+        return null;
+      }
+
+      return {
+        startSeconds: millisecondsToSeconds(item.start),
+        endSeconds: millisecondsToSeconds(item.end),
+        text,
+      } satisfies TranscriptSegment;
+    })
+    .filter((segment): segment is TranscriptSegment => segment !== null);
+
+  if (segments.length === 0) {
+    throw new ExternalServiceError("AssemblyAI 没有返回可用的带时间戳分段。");
+  }
+
+  const hasRealTimeline = segments.some(
+    (segment) =>
+      hasUsableTimestamp(segment.startSeconds) || hasUsableTimestamp(segment.endSeconds),
+  );
+
+  if (!hasRealTimeline) {
+    throw new ExternalServiceError("AssemblyAI 返回了文本，但没有可用的时间戳。");
+  }
+
+  const fullText =
+    typeof payload.text === "string" && normalizeWhitespace(payload.text)
+      ? normalizeWhitespace(payload.text)
+      : segments.map((segment) => segment.text).join(" ");
+  const language =
+    typeof payload.language_code === "string" && normalizeWhitespace(payload.language_code)
+      ? normalizeWhitespace(payload.language_code)
+      : "und";
+
+  return {
+    language,
+    segments,
+    fullText,
+  };
+}
+
+function joinUrl(baseUrl: string, path: string) {
+  const url = new URL(baseUrl);
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
   return url.toString();
 }
 
-class RemoteTranscriptProvider implements TranscriptProvider {
+class AssemblyAiTranscriptProvider implements TranscriptProvider {
   readonly kind = "remote" as const;
 
-  private readonly endpoint: string;
+  private readonly transcriptEndpoint: string;
+  private readonly uploadEndpoint: string;
 
   constructor(
     private readonly apiKey: string,
-    private readonly model: string,
     baseUrl: string,
+    private readonly speechModels: string[],
     private readonly timeoutMs: number,
     private readonly fallbackToMock: boolean,
+    private readonly pollIntervalMs: number,
   ) {
-    this.endpoint = resolveTranscriptEndpoint(baseUrl);
+    this.transcriptEndpoint = joinUrl(baseUrl, "/v2/transcript");
+    this.uploadEndpoint = joinUrl(baseUrl, "/v2/upload");
   }
 
-  private async requestTranscript(video: VideoSource) {
+  private getHeaders() {
+    return {
+      "Content-Type": "application/json",
+      Authorization: this.apiKey,
+    };
+  }
+
+  private async uploadLocalMedia(filePath: string, contentType?: string) {
+    return uploadFileToUrl(
+      this.uploadEndpoint,
+      this.apiKey,
+      {
+        filePath,
+        contentType,
+      },
+      Math.max(this.timeoutMs, 5 * 60 * 1000),
+    );
+  }
+
+  private async submitTranscript(audioUrl: string) {
     const response = await fetchWithTimeout(
-      this.endpoint,
+      this.transcriptEndpoint,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
+        headers: this.getHeaders(),
         body: JSON.stringify({
-          model: this.model,
-          video: {
-            url: video.normalizedUrl,
-            playableUrl: video.playableUrl,
-            provider: video.provider,
-            title: video.title,
-            durationSeconds: video.durationSeconds,
-          },
+          audio_url: audioUrl,
+          speech_models: this.speechModels,
+          language_detection: true,
+          format_text: true,
+          auto_chapters: false,
+          punctuate: true,
+          speaker_labels: true,
         }),
       },
       this.timeoutMs,
@@ -212,7 +293,7 @@ class RemoteTranscriptProvider implements TranscriptProvider {
     try {
       body = rawBody ? JSON.parse(rawBody) : null;
     } catch {
-      throw new ExternalServiceError("Transcript 服务返回了无法解析的响应。");
+      throw new ExternalServiceError("AssemblyAI 返回了无法解析的响应。");
     }
 
     if (!response.ok) {
@@ -221,17 +302,168 @@ class RemoteTranscriptProvider implements TranscriptProvider {
         isRecord(body.error) &&
         typeof body.error.message === "string"
           ? body.error.message
-          : `Transcript 服务返回了 ${response.status} 错误。`;
+          : isRecord(body) && typeof body.error === "string"
+            ? body.error
+            : `AssemblyAI 提交任务失败，状态码 ${response.status}。`;
 
       throw new ExternalServiceError(message, true);
     }
 
-    return normalizeRemoteTranscriptPayload(body);
+    if (!isRecord(body) || typeof body.id !== "string" || !body.id) {
+      throw new ExternalServiceError("AssemblyAI 没有返回有效的 transcript id。");
+    }
+
+    return body.id;
+  }
+
+  private async pollTranscript(id: string) {
+    const pollingEndpoint = joinUrl(this.transcriptEndpoint, id);
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < this.timeoutMs) {
+      const response = await fetchWithTimeout(
+        pollingEndpoint,
+        {
+          headers: {
+            Authorization: this.apiKey,
+          },
+        },
+        this.timeoutMs,
+      );
+
+      const rawBody = await response.text();
+      let body: unknown = null;
+
+      try {
+        body = rawBody ? JSON.parse(rawBody) : null;
+      } catch {
+        throw new ExternalServiceError("AssemblyAI 返回了无法解析的轮询响应。");
+      }
+
+      if (!response.ok) {
+        const message =
+          isRecord(body) &&
+          isRecord(body.error) &&
+          typeof body.error.message === "string"
+            ? body.error.message
+            : isRecord(body) && typeof body.error === "string"
+              ? body.error
+              : `AssemblyAI 轮询失败，状态码 ${response.status}。`;
+
+        throw new ExternalServiceError(message, true);
+      }
+
+      if (!isRecord(body) || typeof body.status !== "string") {
+        throw new ExternalServiceError("AssemblyAI 返回了缺少状态字段的响应。");
+      }
+
+      if (body.status === "completed") {
+        return normalizeAssemblyAiPayload(body);
+      }
+
+      if (body.status === "error") {
+        const errorMessage =
+          typeof body.error === "string" ? body.error : "AssemblyAI 转写任务失败。";
+        throw new ExternalServiceError(errorMessage, true);
+      }
+
+      await sleep(this.pollIntervalMs);
+    }
+
+    throw new ExternalServiceError("AssemblyAI 转写超时，请稍后重试。", true);
   }
 
   async getTranscript({ video }: { video: VideoSource }): Promise<TranscriptData> {
     try {
-      const transcript = await this.requestTranscript(video);
+      const prepared = await prepareTranscriptMedia(
+        video,
+        async ({ filePath, contentType }) =>
+          this.uploadLocalMedia(filePath, contentType),
+      );
+
+      try {
+        const transcriptId = await this.submitTranscript(prepared.audioUrl);
+        const transcript = await this.pollTranscript(transcriptId);
+
+        return {
+          source: "remote",
+          language: transcript.language,
+          fullText: transcript.fullText,
+          segments: transcript.segments,
+        };
+      } finally {
+        await prepared.cleanup().catch(() => undefined);
+      }
+    } catch (error) {
+      if (this.fallbackToMock) {
+        return new MockTranscriptProvider().getTranscript({ video });
+      }
+
+      throw error;
+    }
+  }
+}
+
+class GenericRemoteTranscriptProvider implements TranscriptProvider {
+  readonly kind = "remote" as const;
+
+  private readonly endpoint: string;
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly model: string | null,
+    baseUrl: string,
+    private readonly timeoutMs: number,
+    private readonly fallbackToMock: boolean,
+  ) {
+    this.endpoint = joinUrl(baseUrl, "/transcripts");
+  }
+
+  async getTranscript({ video }: { video: VideoSource }): Promise<TranscriptData> {
+    try {
+      const response = await fetchWithTimeout(
+        this.endpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            video: {
+              url: video.normalizedUrl,
+              playableUrl: video.playableUrl,
+              provider: video.provider,
+              title: video.title,
+              durationSeconds: video.durationSeconds,
+            },
+          }),
+        },
+        this.timeoutMs,
+      );
+
+      const rawBody = await response.text();
+      let body: unknown = null;
+
+      try {
+        body = rawBody ? JSON.parse(rawBody) : null;
+      } catch {
+        throw new ExternalServiceError("Transcript 服务返回了无法解析的响应。");
+      }
+
+      if (!response.ok) {
+        const message =
+          isRecord(body) &&
+          isRecord(body.error) &&
+          typeof body.error.message === "string"
+            ? body.error.message
+            : `Transcript 服务返回了 ${response.status} 错误。`;
+
+        throw new ExternalServiceError(message, true);
+      }
+
+      const transcript = normalizeRemoteTranscriptPayload(body);
 
       return {
         source: "remote",
@@ -251,31 +483,66 @@ class RemoteTranscriptProvider implements TranscriptProvider {
 
 export function createTranscriptProvider(): TranscriptProvider {
   const explicitProvider = (process.env.TRANSCRIPT_PROVIDER ?? "").toLowerCase();
-  const baseUrl = process.env.TRANSCRIPT_API_BASE_URL;
-  const apiKey = process.env.TRANSCRIPT_API_KEY;
-  const model = process.env.TRANSCRIPT_MODEL;
-  const timeoutMs = Number(process.env.TRANSCRIPT_TIMEOUT_MS ?? 45000);
+  const apiKey = process.env.TRANSCRIPT_API_KEY ?? process.env.ASSEMBLYAI_API_KEY;
+  const configuredSpeechModels =
+    process.env.ASSEMBLYAI_SPEECH_MODELS ??
+    process.env.TRANSCRIPT_MODELS ??
+    process.env.TRANSCRIPT_MODEL ??
+    process.env.ASSEMBLYAI_SPEECH_MODEL ??
+    "";
+  const speechModels = configuredSpeechModels
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+  const resolvedSpeechModels =
+    speechModels.length > 0 ? speechModels : ["universal-3-pro", "universal-2"];
+  const timeoutMs = Number(process.env.TRANSCRIPT_TIMEOUT_MS ?? 120000);
   const fallbackToMock =
     (process.env.TRANSCRIPT_REMOTE_FALLBACK_TO_MOCK ?? "false").toLowerCase() ===
     "true";
+  const pollIntervalMs = Number(
+    process.env.TRANSCRIPT_POLL_INTERVAL_MS ?? DEFAULT_POLL_INTERVAL_MS,
+  );
+  const baseUrl =
+    process.env.TRANSCRIPT_API_BASE_URL ??
+    process.env.ASSEMBLYAI_BASE_URL ??
+    DEFAULT_ASSEMBLYAI_BASE_URL;
 
   if (explicitProvider === "mock") {
     return new MockTranscriptProvider();
   }
 
-  if (baseUrl && apiKey && model) {
-    return new RemoteTranscriptProvider(
+  if ((explicitProvider === "assemblyai" || explicitProvider === "remote") && apiKey) {
+    if (explicitProvider === "remote" && process.env.TRANSCRIPT_API_BASE_URL) {
+      return new GenericRemoteTranscriptProvider(
+        apiKey,
+        resolvedSpeechModels[0] ?? null,
+        process.env.TRANSCRIPT_API_BASE_URL,
+        timeoutMs,
+        fallbackToMock,
+      );
+    }
+
+    return new AssemblyAiTranscriptProvider(
       apiKey,
-      model,
       baseUrl,
+      resolvedSpeechModels,
       timeoutMs,
       fallbackToMock,
+      pollIntervalMs,
+    );
+  }
+
+  if (explicitProvider === "assemblyai") {
+    throw new ExternalServiceError(
+      "TRANSCRIPT_PROVIDER=assemblyai 时必须配置 TRANSCRIPT_API_KEY 或 ASSEMBLYAI_API_KEY。",
+      true,
     );
   }
 
   if (explicitProvider === "remote") {
     throw new ExternalServiceError(
-      "TRANSCRIPT_PROVIDER=remote 时必须同时配置 TRANSCRIPT_API_BASE_URL、TRANSCRIPT_API_KEY 和 TRANSCRIPT_MODEL。",
+      "TRANSCRIPT_PROVIDER=remote 时必须配置可用的 transcript 服务密钥；若走通用 remote，还需要 TRANSCRIPT_API_BASE_URL。",
       true,
     );
   }

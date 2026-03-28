@@ -4,7 +4,8 @@ import type {
   VideoProvider,
 } from "@/lib/analysis/types";
 
-const DIRECT_VIDEO_FILE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
+const DIRECT_VIDEO_FILE_PATTERN =
+  /\.(mp4|webm|ogg|mov|m4v|mkv|avi|mp3|m4a|wav|aac|flac|mpeg|mpg|m3u8)(?:$|[?#])/i;
 
 const HTML_ENTITIES: Record<string, string> = {
   "&amp;": "&",

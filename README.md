@@ -40,10 +40,45 @@ AI_TIMEOUT_MS=25000
 
 # Transcript provider
 TRANSCRIPT_PROVIDER=mock
+YT_DLP_BIN=yt-dlp
+# YTDLP_COOKIES_PATH=
+# YTDLP_COOKIES_FROM_BROWSER=
+# TRANSCRIPT_UPLOAD_TIMEOUT_MS=300000
 
 # Optional: make local processing state easier to observe
 ANALYSIS_MOCK_DELAY_MS=1200
 ```
+
+## Deploying To Vercel
+
+This project supports page-style video URLs on Vercel as well as local development:
+
+- Local development uses `.\.tools\yt-dlp.exe` on Windows.
+- Vercel installs a Linux `yt-dlp` binary during `postinstall` to `bin/yt-dlp`.
+- Server-side temporary media files are written to `/tmp` on Vercel and `.tmp/transcript-media` locally.
+- The `yt-dlp` binary is explicitly included in the server trace for the analysis API routes via `outputFileTracingIncludes`.
+
+Recommended Vercel environment variables:
+
+```bash
+AI_PROVIDER=http
+AI_BASE_URL=https://api.moonshot.cn/v1
+AI_API_KEY=...
+AI_MODEL=moonshot-v1-32k
+
+TRANSCRIPT_PROVIDER=assemblyai
+TRANSCRIPT_API_KEY=...
+ASSEMBLYAI_BASE_URL=https://api.assemblyai.com
+ASSEMBLYAI_SPEECH_MODELS=universal-3-pro,universal-2
+TRANSCRIPT_TIMEOUT_MS=120000
+TRANSCRIPT_UPLOAD_TIMEOUT_MS=300000
+```
+
+Notes:
+
+- Most direct media URLs and many Bilibili / YouTube page URLs should work after deployment.
+- Some videos may still require cookies, login, region access, or may block automated downloads.
+- The current implementation is suitable for low to moderate traffic. For heavier workloads, move media extraction into a dedicated worker or container service.
 
 ### 变量说明
 
@@ -61,7 +96,6 @@ ANALYSIS_MOCK_DELAY_MS=1200
 - `AI_TIMEOUT_MS`
   - AI 请求超时时间，默认 `25000`
 - `TRANSCRIPT_PROVIDER`
-  - 当前仅实现 `mock`
 - `ANALYSIS_MOCK_DELAY_MS`
   - 可选。用于本地演示时延长 mock transcript 的处理时间，方便看到 `processing` 状态
 
@@ -90,18 +124,6 @@ ANALYSIS_MOCK_DELAY_MS=1200
 }
 ```
 
-- 服务端会对模型输出做解析和兜底校验，避免异常响应直接打崩页面
-- 聊天接口与摘要接口共用同一套视频上下文
-- `/dashboard` 右侧面板已经从 mock 文案切换为真实状态流
-
-## 已知限制
-
-- 当前 repository 是内存实现，服务重启后任务会丢失
-  - 下一步应替换为 Postgres / Supabase / Neon 之类的持久化存储
-- 当前 transcript provider 默认是 `mock`
-  - 也就是说，如果还没接入真实字幕/ASR，摘要结果仍然是基于 mock transcript 生成
-- 页面内视频预览目前只支持浏览器可直接播放的媒体地址，例如 `.mp4`、`.webm`
-  - 对于 YouTube、Bilibili 等网页链接，当前版本仍可分析，但不会在左侧播放器内直接预览
 
 ## 目录概览
 

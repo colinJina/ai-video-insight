@@ -2,17 +2,18 @@ import { randomUUID } from "node:crypto";
 
 import {
   ConflictError,
+  ExternalServiceError,
   getPublicErrorMessage,
   NotFoundError,
   ValidationError,
 } from "@/lib/analysis/errors";
-import { buildAnalysisResult } from "@/lib/analysis/result";
+import { createAiProvider } from "@/lib/analysis/providers/ai";
+import { createTranscriptProvider } from "@/lib/analysis/providers/transcript";
 import {
   getAnalysisRepository,
   toPublicAnalysisTask,
 } from "@/lib/analysis/repository";
-import { createAiProvider } from "@/lib/analysis/providers/ai";
-import { createTranscriptProvider } from "@/lib/analysis/providers/transcript";
+import { buildAnalysisResult } from "@/lib/analysis/result";
 import type {
   AnalysisChatMessage,
   AnalysisPublicTask,
@@ -47,6 +48,24 @@ function createUserMessage(content: string): AnalysisChatMessage {
   };
 }
 
+function buildProcessingErrorMessage(
+  stage: "transcript" | "summary",
+  error: unknown,
+  transcriptSource?: "mock" | "remote",
+) {
+  const detail = getPublicErrorMessage(error);
+
+  if (stage === "transcript") {
+    if (transcriptSource === "mock") {
+      return `转写阶段未使用真实视频内容，当前仍是 mock transcript。${detail}`;
+    }
+
+    return `转写阶段失败：${detail}`;
+  }
+
+  return `AI 摘要生成失败：${detail}`;
+}
+
 async function processAnalysisTask(id: string) {
   const repository = getAnalysisRepository();
   const existing = await repository.findById(id);
@@ -72,25 +91,43 @@ async function processAnalysisTask(id: string) {
     const transcript = await transcriptProvider.getTranscript({
       video: latestTask.video,
     });
-    const structuredSummary = await aiProvider.generateVideoSummary({
-      video: latestTask.video,
-      transcript,
-    });
-    const result = buildAnalysisResult(structuredSummary);
-    const introMessage = createAssistantMessage(result.chatContext.intro);
 
-    await repository.update(id, {
-      status: "completed",
-      transcript,
-      transcriptSource: transcript.source,
-      result,
-      chatMessages: [introMessage],
-      errorMessage: null,
-    });
+    try {
+      const structuredSummary = await aiProvider.generateVideoSummary({
+        video: latestTask.video,
+        transcript,
+      });
+      const result = buildAnalysisResult(structuredSummary);
+      const introMessage = createAssistantMessage(result.chatContext.intro);
+
+      await repository.update(id, {
+        status: "completed",
+        transcript,
+        transcriptSource: transcript.source,
+        result,
+        chatMessages: [introMessage],
+        errorMessage: null,
+      });
+    } catch (error) {
+      await repository.update(id, {
+        status: "failed",
+        transcript,
+        transcriptSource: transcript.source,
+        errorMessage: buildProcessingErrorMessage("summary", error),
+      });
+    }
   } catch (error) {
     await repository.update(id, {
       status: "failed",
-      errorMessage: getPublicErrorMessage(error),
+      transcriptSource:
+        transcriptProvider.kind === "mock" || error instanceof ExternalServiceError
+          ? transcriptProvider.kind
+          : null,
+      errorMessage: buildProcessingErrorMessage(
+        "transcript",
+        error,
+        transcriptProvider.kind,
+      ),
     });
   }
 }
