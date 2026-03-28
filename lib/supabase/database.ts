@@ -1,0 +1,104 @@
+import type { AppThemePreference, NotificationType } from "@/lib/app/types";
+import type {
+  AnalysisChatMessage,
+  AnalysisResult,
+  AnalysisTaskStatus,
+  TranscriptData,
+  TranscriptSourceKind,
+  VideoSource,
+} from "@/lib/analysis/types";
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export interface Database {
+  public: {
+    Tables: {
+      analysis_records: {
+        Row: {
+          id: string;
+          user_id: string;
+          status: AnalysisTaskStatus;
+          video: VideoSource;
+          transcript: TranscriptData | null;
+          transcript_source: TranscriptSourceKind | null;
+          result: AnalysisResult | null;
+          chat_messages: AnalysisChatMessage[];
+          error_message: string | null;
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          status: AnalysisTaskStatus;
+          video: VideoSource;
+          transcript?: TranscriptData | null;
+          transcript_source?: TranscriptSourceKind | null;
+          result?: AnalysisResult | null;
+          chat_messages?: AnalysisChatMessage[];
+          error_message?: string | null;
+          archived_at?: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["analysis_records"]["Row"]>;
+        Relationships: [];
+      };
+      user_notifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: NotificationType;
+          title: string;
+          body: string;
+          related_analysis_id: string | null;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type: NotificationType;
+          title: string;
+          body: string;
+          related_analysis_id?: string | null;
+          read_at?: string | null;
+          created_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_notifications"]["Row"]>;
+        Relationships: [];
+      };
+      user_settings: {
+        Row: {
+          user_id: string;
+          nickname: string | null;
+          avatar_url: string | null;
+          notifications_enabled: boolean;
+          theme_preference: AppThemePreference;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          nickname?: string | null;
+          avatar_url?: string | null;
+          notifications_enabled?: boolean;
+          theme_preference?: AppThemePreference;
+          updated_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_settings"]["Row"]>;
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+}

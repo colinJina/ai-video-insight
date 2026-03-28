@@ -6,6 +6,7 @@ import {
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
 import { createAnalysisTask } from "@/lib/analysis/service";
+import { getOptionalAppSession } from "@/lib/auth/session";
 import type { CreateAnalysisInput } from "@/lib/analysis/types";
 
 export const runtime = "nodejs";
@@ -17,8 +18,10 @@ const NO_STORE_HEADERS = {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<CreateAnalysisInput>;
+    const session = await getOptionalAppSession();
     const analysis = await createAnalysisTask({
       videoUrl: body.videoUrl ?? "",
+      userId: session?.user.id ?? "anonymous-viewer",
     });
 
     return NextResponse.json(

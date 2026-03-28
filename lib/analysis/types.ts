@@ -77,6 +77,7 @@ export interface AnalysisResult extends StructuredVideoSummary {
 
 export interface AnalysisTask {
   id: string;
+  userId: string;
   status: AnalysisTaskStatus;
   video: VideoSource;
   transcript: TranscriptData | null;
@@ -84,11 +85,19 @@ export interface AnalysisTask {
   result: AnalysisResult | null;
   chatMessages: AnalysisChatMessage[];
   errorMessage: string | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export type AnalysisPublicTask = Omit<AnalysisTask, "transcript">;
+
+export interface AnalysisListInput {
+  userId: string;
+  archived?: boolean;
+  query?: string;
+  limit?: number;
+}
 
 export interface CreateAnalysisInput {
   videoUrl: string;

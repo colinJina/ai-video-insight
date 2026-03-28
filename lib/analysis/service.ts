@@ -16,6 +16,7 @@ import {
 import { buildAnalysisResult } from "@/lib/analysis/result";
 import type {
   AnalysisChatMessage,
+  AnalysisListInput,
   AnalysisPublicTask,
   AnalysisTask,
   ChatInput,
@@ -26,6 +27,7 @@ import {
   normalizeWhitespace,
   trimText,
 } from "@/lib/analysis/utils";
+import { createNotification } from "@/lib/notifications/service";
 import { extractVideoMetadata } from "@/lib/analysis/video-metadata";
 
 const runningTasks = new Map<string, Promise<void>>();
@@ -108,12 +110,28 @@ async function processAnalysisTask(id: string) {
         chatMessages: [introMessage],
         errorMessage: null,
       });
+
+      await createNotification({
+        userId: latestTask.userId,
+        type: "analysis_completed",
+        title: "分析已完成",
+        body: `《${result.title}》已生成摘要、关键要点和追问建议。`,
+        relatedAnalysisId: latestTask.id,
+      });
     } catch (error) {
       await repository.update(id, {
         status: "failed",
         transcript,
         transcriptSource: transcript.source,
         errorMessage: buildProcessingErrorMessage("summary", error),
+      });
+
+      await createNotification({
+        userId: latestTask.userId,
+        type: "analysis_failed",
+        title: "分析失败",
+        body: `《${latestTask.video.title}》在 AI 摘要阶段失败，请稍后重试。`,
+        relatedAnalysisId: latestTask.id,
       });
     }
   } catch (error) {
@@ -129,6 +147,14 @@ async function processAnalysisTask(id: string) {
         transcriptProvider.kind,
       ),
     });
+
+    await createNotification({
+      userId: latestTask.userId,
+      type: "analysis_failed",
+      title: "分析失败",
+      body: `《${latestTask.video.title}》在转写阶段失败，请检查链接后重试。`,
+      relatedAnalysisId: latestTask.id,
+    });
   }
 }
 
@@ -143,12 +169,11 @@ function ensureAnalysisTaskRunning(id: string) {
   });
 
   runningTasks.set(id, promise);
-
   return promise;
 }
 
 export async function createAnalysisTask(
-  input: CreateAnalysisInput,
+  input: CreateAnalysisInput & { userId: string },
 ): Promise<AnalysisPublicTask> {
   const validUrl = assertValidVideoUrl(input.videoUrl);
   const video = await extractVideoMetadata(validUrl.toString());
@@ -156,6 +181,7 @@ export async function createAnalysisTask(
 
   const task: AnalysisTask = {
     id: randomUUID(),
+    userId: input.userId,
     status: "queued",
     video,
     transcript: null,
@@ -163,6 +189,7 @@ export async function createAnalysisTask(
     result: null,
     chatMessages: [],
     errorMessage: null,
+    archivedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -185,6 +212,45 @@ export async function getAnalysisTask(id: string): Promise<AnalysisPublicTask> {
 
   if (task.status === "queued" || task.status === "processing") {
     void ensureAnalysisTaskRunning(task.id);
+  }
+
+  return toPublicAnalysisTask(task);
+}
+
+export async function getAnalysisTaskForUser(
+  id: string,
+  userId: string,
+): Promise<AnalysisPublicTask> {
+  const repository = getAnalysisRepository();
+  const task = await repository.findByIdForUser(id, userId);
+
+  if (!task) {
+    throw new NotFoundError("找不到对应的分析任务。");
+  }
+
+  if (task.status === "queued" || task.status === "processing") {
+    void ensureAnalysisTaskRunning(task.id);
+  }
+
+  return toPublicAnalysisTask(task);
+}
+
+export async function listAnalysisTasksForUser(input: AnalysisListInput) {
+  const repository = getAnalysisRepository();
+  const tasks = await repository.listByUser(input);
+  return tasks.map(toPublicAnalysisTask);
+}
+
+export async function setAnalysisArchived(
+  id: string,
+  userId: string,
+  archived: boolean,
+) {
+  const repository = getAnalysisRepository();
+  const task = await repository.setArchived(id, userId, archived);
+
+  if (!task) {
+    throw new NotFoundError("找不到对应的分析任务。");
   }
 
   return toPublicAnalysisTask(task);

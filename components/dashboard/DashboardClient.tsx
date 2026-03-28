@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import AiPanel from "@/components/AiPanel";
-import Navbar from "@/components/Navbar";
 import VideoSection, { type VideoSectionHandle } from "@/components/VideoSection";
 import type {
   AnalysisPublicTask,
@@ -87,14 +86,14 @@ function buildStatusMessage(
   }
 
   if (viewStatus === "processing") {
-    return "服务端正在校验链接、抽取视频信息、准备转写并生成结构化摘要。";
+    return "服务端正在校验链接、提取视频信息、准备转写并生成结构化摘要。";
   }
 
   if (viewStatus === "success" && analysis?.result) {
     const usableTimeline = analysis.result.outline.filter((item) => item.time).length;
 
     if (analysis.transcriptSource === "mock") {
-      return "分析已完成，但当前仍在使用 mock transcript，所以摘要不是基于这条视频的真实转写内容。";
+      return "分析已完成，但当前仍在使用 mock transcript，所以摘要并不是基于这条视频的真实转写内容。";
     }
 
     return usableTimeline > 0
@@ -134,7 +133,9 @@ function buildVideoMetrics(
       icon: "text_snippet",
       label: analysis?.transcriptSource
         ? `转写来源：${
-            analysis.transcriptSource === "mock" ? "Mock Transcript" : "Remote Transcript"
+            analysis.transcriptSource === "mock"
+              ? "Mock Transcript"
+              : "Remote Transcript"
           }`
         : "尚未生成转写内容",
     },
@@ -298,44 +299,41 @@ export default function DashboardClient() {
   const description =
     analysis?.result?.summary ??
     analysis?.video.description ??
-    "服务端会校验链接、抽取基础信息、获取字幕或真实转写，并生成结构化概要与问答上下文。";
+    "服务端会校验链接、提取基础信息、获取字幕或真实转写，并生成结构化概要与问答上下文。";
   const statusMessage = buildStatusMessage(viewStatus, analysis, errorMessage);
   const metrics = buildVideoMetrics(analysis, previewVideoUrl);
 
   return (
-    <div className="page-shell">
-      <Navbar />
-      <main className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-8 px-4 pb-24 pt-24 sm:px-6 lg:flex-row lg:px-8 lg:pb-12">
-        <div className="w-full lg:w-[62%]">
-          <VideoSection
-            ref={videoRef}
-            authoritativeDurationSeconds={analysis?.video.durationSeconds ?? null}
-            description={description}
-            metrics={metrics}
-            onAnalyze={handleAnalyze}
-            onVideoUrlChange={setVideoUrl}
-            posterSrc={posterUrl}
-            sourceUrl={sourceUrl}
-            status={viewStatus}
-            statusMessage={statusMessage}
-            title={title}
-            videoSrc={previewVideoUrl}
-            videoUrl={videoUrl}
-          />
-        </div>
-        <div className="w-full lg:w-[38%]">
-          <AiPanel
-            analysis={analysis}
-            chatError={chatError}
-            isChatPending={isChatPending}
-            onOutlineClick={(seconds) => {
-              videoRef.current?.seekTo(seconds);
-            }}
-            onSendMessage={handleSendMessage}
-            viewStatus={viewStatus}
-          />
-        </div>
-      </main>
+    <div className="flex w-full flex-col gap-8 lg:flex-row lg:pb-12">
+      <div className="w-full lg:w-[62%]">
+        <VideoSection
+          ref={videoRef}
+          authoritativeDurationSeconds={analysis?.video.durationSeconds ?? null}
+          description={description}
+          metrics={metrics}
+          onAnalyze={handleAnalyze}
+          onVideoUrlChange={setVideoUrl}
+          posterSrc={posterUrl}
+          sourceUrl={sourceUrl}
+          status={viewStatus}
+          statusMessage={statusMessage}
+          title={title}
+          videoSrc={previewVideoUrl}
+          videoUrl={videoUrl}
+        />
+      </div>
+      <div className="w-full lg:w-[38%]">
+        <AiPanel
+          analysis={analysis}
+          chatError={chatError}
+          isChatPending={isChatPending}
+          onOutlineClick={(seconds) => {
+            videoRef.current?.seekTo(seconds);
+          }}
+          onSendMessage={handleSendMessage}
+          viewStatus={viewStatus}
+        />
+      </div>
     </div>
   );
 }
