@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { AppNotification, NotificationType } from "@/lib/app/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseRepositoryConfigured } from "@/lib/supabase/env";
+import { shouldFallbackToMemoryRepository } from "@/lib/supabase/repository-fallback";
+import { isSupabaseBackedUserId } from "@/lib/supabase/user-id";
 
 export interface NotificationRepository {
   create(
@@ -216,9 +218,82 @@ export class SupabaseNotificationRepository implements NotificationRepository {
   }
 }
 
-const repository: NotificationRepository = isSupabaseRepositoryConfigured()
+const memoryRepository = new MemoryNotificationRepository();
+const supabaseRepository = isSupabaseRepositoryConfigured()
   ? new SupabaseNotificationRepository()
-  : new MemoryNotificationRepository();
+  : null;
+let didWarnAboutNotificationFallback = false;
+
+async function runNotificationRepository<T>(
+  operation: string,
+  runMemory: () => Promise<T>,
+  runSupabase: (() => Promise<T>) | null,
+) {
+  if (!runSupabase) {
+    return runMemory();
+  }
+
+  try {
+    return await runSupabase();
+  } catch (error) {
+    if (!shouldFallbackToMemoryRepository(error)) {
+      throw error;
+    }
+
+    if (!didWarnAboutNotificationFallback) {
+      didWarnAboutNotificationFallback = true;
+      console.warn(
+        `[notifications] Supabase repository is unavailable during ${operation}; falling back to in-memory storage.`,
+        error,
+      );
+    }
+
+    return runMemory();
+  }
+}
+
+const repository: NotificationRepository = {
+  create(input) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(input.userId);
+    return runNotificationRepository(
+      "create",
+      () => memoryRepository.create(input),
+      useSupabase ? () => supabaseRepository.create(input) : null,
+    );
+  },
+  listByUser(userId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runNotificationRepository(
+      "listByUser",
+      () => memoryRepository.listByUser(userId),
+      useSupabase ? () => supabaseRepository.listByUser(userId) : null,
+    );
+  },
+  countUnread(userId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runNotificationRepository(
+      "countUnread",
+      () => memoryRepository.countUnread(userId),
+      useSupabase ? () => supabaseRepository.countUnread(userId) : null,
+    );
+  },
+  markAsRead(userId, notificationId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runNotificationRepository(
+      "markAsRead",
+      () => memoryRepository.markAsRead(userId, notificationId),
+      useSupabase ? () => supabaseRepository.markAsRead(userId, notificationId) : null,
+    );
+  },
+  markAllAsRead(userId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runNotificationRepository(
+      "markAllAsRead",
+      () => memoryRepository.markAllAsRead(userId),
+      useSupabase ? () => supabaseRepository.markAllAsRead(userId) : null,
+    );
+  },
+};
 
 export function getNotificationRepository() {
   return repository;

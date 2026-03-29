@@ -4,12 +4,20 @@ import { redirect } from "next/navigation";
 import MetricTile from "@/components/app/MetricTile";
 import LoginForm from "@/components/auth/LoginForm";
 import { getOptionalAppSession } from "@/lib/auth/session";
+import { sanitizeRedirectPath } from "@/lib/auth/utils";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
   const session = await getOptionalAppSession();
+  const params = await searchParams;
+  const requestedNext = Array.isArray(params.next) ? params.next[0] : params.next;
+  const nextPath = sanitizeRedirectPath(requestedNext);
 
   if (session) {
-    redirect("/library");
+    redirect(nextPath);
   }
 
   return (
@@ -80,7 +88,7 @@ export default async function LoginPage() {
                 </div>
               </div>
 
-              <LoginForm />
+              <LoginForm redirectToPath={nextPath} />
             </div>
           </div>
         </section>

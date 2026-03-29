@@ -6,7 +6,7 @@ import { requireAppSession } from "@/lib/auth/guards";
 import { listNotificationsForUser } from "@/lib/notifications/service";
 
 export default async function NotificationsPage() {
-  const session = await requireAppSession();
+  const session = await requireAppSession("/notifications");
   const notifications = await listNotificationsForUser(session.user.id);
 
   return (

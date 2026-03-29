@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 import type { AppUser } from "@/lib/app/types";
+import { sanitizeRedirectPath } from "@/lib/auth/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
@@ -27,6 +28,10 @@ const FALLBACK_AVATAR =
 
 function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function buildLoginHref(targetPath: string) {
+  return `/login?next=${encodeURIComponent(sanitizeRedirectPath(targetPath))}`;
 }
 
 export default function Navbar({
@@ -53,23 +58,27 @@ export default function Navbar({
     const nextQuery = String(formData.get("query") ?? "").trim();
 
     if (!nextQuery) {
-      router.push("/library");
+      router.push(currentUser ? "/library" : buildLoginHref("/library"));
       return;
     }
 
-    router.push(`/library?query=${encodeURIComponent(nextQuery)}`);
+    const targetPath = `/library?query=${encodeURIComponent(nextQuery)}`;
+    router.push(currentUser ? targetPath : buildLoginHref(targetPath));
   };
 
   const handleLogout = async () => {
+    const logoutTasks: Promise<unknown>[] = [
+      fetch("/api/auth/demo-logout", {
+        method: "POST",
+      }),
+    ];
+
     if (isSupabaseAuthConfigured()) {
       const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } else {
-      await fetch("/api/auth/demo-logout", {
-        method: "POST",
-      });
+      logoutTasks.push(supabase.auth.signOut());
     }
 
+    await Promise.allSettled(logoutTasks);
     router.push("/login");
     router.refresh();
   };
@@ -98,7 +107,11 @@ export default function Navbar({
                         ? "border-b-2 border-[color:var(--primary-strong)] pb-1 text-primary"
                         : "text-[color:var(--text-muted)] transition-colors hover:text-primary"
                     }
-                    href={item.href}
+                    href={
+                      !currentUser && item.href !== "/dashboard"
+                        ? buildLoginHref(item.href)
+                        : item.href
+                    }
                   >
                     {item.label}
                   </Link>
@@ -135,7 +148,7 @@ export default function Navbar({
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
               className="relative rounded-full p-2 text-[color:var(--text-muted)] transition-all hover:bg-primary/10 hover:text-primary"
-              href={currentUser ? "/notifications" : "/login"}
+              href={currentUser ? "/notifications" : buildLoginHref("/notifications")}
             >
               <span className="material-symbols-outlined">notifications</span>
               {unreadCount > 0 ? (
@@ -146,7 +159,7 @@ export default function Navbar({
             </Link>
             <Link
               className="rounded-full p-2 text-[color:var(--text-muted)] transition-all hover:bg-primary/10 hover:text-primary"
-              href={currentUser ? "/settings" : "/login"}
+              href={currentUser ? "/settings" : buildLoginHref("/settings")}
             >
               <span className="material-symbols-outlined">settings</span>
             </Link>
@@ -181,7 +194,7 @@ export default function Navbar({
             ) : (
               <Link
                 className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.03]"
-                href="/login"
+                href={buildLoginHref(pathname)}
               >
                 登录
               </Link>
@@ -202,7 +215,11 @@ export default function Navbar({
                   ? "flex flex-col items-center gap-1 text-primary"
                   : "flex flex-col items-center gap-1 text-[color:var(--text-muted)]"
               }
-              href={!currentUser && item.href !== "/dashboard" ? "/login" : item.href}
+              href={
+                !currentUser && item.href !== "/dashboard"
+                  ? buildLoginHref(item.href)
+                  : item.href
+              }
             >
               <span className="material-symbols-outlined">{item.icon}</span>
               <span className="text-[8px] uppercase tracking-[0.2em]">

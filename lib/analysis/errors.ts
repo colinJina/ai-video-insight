@@ -17,6 +17,20 @@ export class ValidationError extends AnalysisError {
   }
 }
 
+export class UnauthorizedError extends AnalysisError {
+  constructor(message = "请先登录后继续。") {
+    super(message, 401, "UNAUTHORIZED");
+    this.name = "UnauthorizedError";
+  }
+}
+
+export class ForbiddenError extends AnalysisError {
+  constructor(message = "你没有权限访问这项内容。") {
+    super(message, 403, "FORBIDDEN");
+    this.name = "ForbiddenError";
+  }
+}
+
 export class NotFoundError extends AnalysisError {
   constructor(message: string) {
     super(message, 404, "NOT_FOUND");

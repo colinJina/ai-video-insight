@@ -18,7 +18,7 @@ export default async function ArchivePage({
 }: {
   searchParams: Promise<{ query?: string | string[] }>;
 }) {
-  const session = await requireAppSession();
+  const session = await requireAppSession("/archive");
   const { query } = await searchParams;
   const normalizedQuery = normalizeQuery(query);
   const tasks = await listAnalysisTasksForUser({

@@ -6,6 +6,8 @@ import type {
 } from "@/lib/analysis/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseRepositoryConfigured } from "@/lib/supabase/env";
+import { shouldFallbackToMemoryRepository } from "@/lib/supabase/repository-fallback";
+import { isSupabaseBackedUserId } from "@/lib/supabase/user-id";
 
 export interface AnalysisRepository {
   create(task: AnalysisTask): Promise<AnalysisTask>;
@@ -343,9 +345,95 @@ export class SupabaseAnalysisRepository implements AnalysisRepository {
   }
 }
 
-const repository: AnalysisRepository = isSupabaseRepositoryConfigured()
+const memoryRepository = new MemoryAnalysisRepository();
+const supabaseRepository = isSupabaseRepositoryConfigured()
   ? new SupabaseAnalysisRepository()
-  : new MemoryAnalysisRepository();
+  : null;
+let didWarnAboutAnalysisFallback = false;
+
+async function runAnalysisRepository<T>(
+  operation: string,
+  runMemory: () => Promise<T>,
+  runSupabase: (() => Promise<T>) | null,
+) {
+  if (!runSupabase) {
+    return runMemory();
+  }
+
+  try {
+    return await runSupabase();
+  } catch (error) {
+    if (!shouldFallbackToMemoryRepository(error)) {
+      throw error;
+    }
+
+    if (!didWarnAboutAnalysisFallback) {
+      didWarnAboutAnalysisFallback = true;
+      console.warn(
+        `[analysis] Supabase repository is unavailable during ${operation}; falling back to in-memory storage.`,
+        error,
+      );
+    }
+
+    return runMemory();
+  }
+}
+
+const repository: AnalysisRepository = {
+  create(task) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(task.userId);
+    return runAnalysisRepository(
+      "create",
+      () => memoryRepository.create(task),
+      useSupabase ? () => supabaseRepository.create(task) : null,
+    );
+  },
+  findById(id) {
+    return runAnalysisRepository(
+      "findById",
+      () => memoryRepository.findById(id),
+      supabaseRepository ? () => supabaseRepository.findById(id) : null,
+    );
+  },
+  findByIdForUser(id, userId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runAnalysisRepository(
+      "findByIdForUser",
+      () => memoryRepository.findByIdForUser(id, userId),
+      useSupabase ? () => supabaseRepository.findByIdForUser(id, userId) : null,
+    );
+  },
+  listByUser(input) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(input.userId);
+    return runAnalysisRepository(
+      "listByUser",
+      () => memoryRepository.listByUser(input),
+      useSupabase ? () => supabaseRepository.listByUser(input) : null,
+    );
+  },
+  update(id, patch) {
+    return runAnalysisRepository(
+      "update",
+      () => memoryRepository.update(id, patch),
+      supabaseRepository ? () => supabaseRepository.update(id, patch) : null,
+    );
+  },
+  appendChatMessages(id, messages) {
+    return runAnalysisRepository(
+      "appendChatMessages",
+      () => memoryRepository.appendChatMessages(id, messages),
+      supabaseRepository ? () => supabaseRepository.appendChatMessages(id, messages) : null,
+    );
+  },
+  setArchived(id, userId, archived) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runAnalysisRepository(
+      "setArchived",
+      () => memoryRepository.setArchived(id, userId, archived),
+      useSupabase ? () => supabaseRepository.setArchived(id, userId, archived) : null,
+    );
+  },
+};
 
 export function getAnalysisRepository() {
   return repository;

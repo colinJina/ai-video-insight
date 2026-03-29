@@ -6,7 +6,7 @@ import {
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
 import { setAnalysisArchived } from "@/lib/analysis/service";
-import { requireAppSession } from "@/lib/auth/guards";
+import { requireAppApiSession } from "@/lib/auth/guards";
 
 type ArchiveRouteContext = {
   params: Promise<{
@@ -16,7 +16,7 @@ type ArchiveRouteContext = {
 
 export async function PATCH(request: Request, context: ArchiveRouteContext) {
   try {
-    const session = await requireAppSession();
+    const session = await requireAppApiSession();
     const { id } = await context.params;
     const body = (await request.json()) as { archived?: boolean };
     const analysis = await setAnalysisArchived(

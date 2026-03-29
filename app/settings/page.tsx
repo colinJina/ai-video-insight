@@ -6,7 +6,7 @@ import { requireAppSession } from "@/lib/auth/guards";
 import { getSettingsForUser } from "@/lib/settings/service";
 
 export default async function SettingsPage() {
-  const session = await requireAppSession();
+  const session = await requireAppSession("/settings");
   const settings = await getSettingsForUser(session.user.id);
 
   return (

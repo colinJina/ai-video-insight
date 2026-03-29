@@ -31,6 +31,11 @@ npm run dev
 在项目根目录创建 `.env.local`：
 
 ```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
 # AI provider
 AI_PROVIDER=mock
 AI_BASE_URL=
@@ -48,6 +53,92 @@ YT_DLP_BIN=yt-dlp
 # Optional: make local processing state easier to observe
 ANALYSIS_MOCK_DELAY_MS=1200
 ```
+
+也可以直接复制：
+
+```bash
+cp .env.example .env.local
+```
+
+然后只填你自己的 Supabase 与 AI / Transcript 配置。
+
+## Supabase Setup
+
+当前仓库已经接好了：
+
+- Supabase Auth magic link 登录
+- Supabase Postgres 仓库模式
+- 用户隔离的 analysis / notifications / settings 数据结构
+
+你还需要完成 4 个手动步骤：
+
+### 1. 创建 Supabase 项目
+
+在 Supabase 控制台创建一个新项目，然后拿到：
+
+- `Project URL`
+- `Publishable key`
+- `Service role key`
+
+把它们填进 `.env.local`。
+
+### 2. 执行数据库 SQL
+
+打开 Supabase `SQL Editor`，执行：
+
+- [supabase/schema.sql](C:\Users\31744\Desktop\my-app\supabase\schema.sql)
+
+这会创建：
+
+- `public.analysis_records`
+- `public.user_notifications`
+- `public.user_settings`
+- 自动更新时间触发器
+- RLS 策略
+
+### 3. 打开邮箱登录
+
+在 Supabase 控制台中确认：
+
+1. `Authentication -> Providers -> Email` 已开启
+2. `Authentication -> URL Configuration -> Site URL`
+   本地建议填：`http://localhost:3000`
+3. `Authentication -> URL Configuration -> Redirect URLs`
+   至少加入：`http://localhost:3000/auth/callback`
+
+如果你之后部署到 Vercel，也要加入正式域名的：
+
+- `https://你的域名/auth/callback`
+
+### 4. 本地验证
+
+```bash
+npm run dev
+```
+
+然后访问：
+
+- [http://localhost:3000/login](http://localhost:3000/login)
+
+输入邮箱后：
+
+1. 收到 magic link
+2. 点击后回到 `/auth/callback`
+3. 项目自动交换 Supabase session
+4. 跳回资料库或你原本要访问的受保护页面
+
+## 当前 Supabase 对接范围
+
+目前代码已经能识别并使用 Supabase 的部分：
+
+- [lib/supabase/client.ts](C:\Users\31744\Desktop\my-app\lib\supabase\client.ts)
+- [lib/supabase/server.ts](C:\Users\31744\Desktop\my-app\lib\supabase\server.ts)
+- [lib/supabase/admin.ts](C:\Users\31744\Desktop\my-app\lib\supabase\admin.ts)
+- [app/auth/callback/route.ts](C:\Users\31744\Desktop\my-app\app\auth\callback\route.ts)
+- [lib/auth/session.ts](C:\Users\31744\Desktop\my-app\lib\auth\session.ts)
+- [lib/analysis/repository.ts](C:\Users\31744\Desktop\my-app\lib\analysis\repository.ts)
+- [lib/notifications/repository.ts](C:\Users\31744\Desktop\my-app\lib\notifications\repository.ts)
+- [lib/settings/repository.ts](C:\Users\31744\Desktop\my-app\lib\settings\repository.ts)
 
 ## Deploying To Vercel
 

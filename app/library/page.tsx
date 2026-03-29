@@ -20,7 +20,7 @@ export default async function LibraryPage({
 }: {
   searchParams: Promise<{ query?: string | string[] }>;
 }) {
-  const session = await requireAppSession();
+  const session = await requireAppSession("/library");
   const { query } = await searchParams;
   const normalizedQuery = normalizeQuery(query);
   const tasks = await listAnalysisTasksForUser({

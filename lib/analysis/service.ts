@@ -236,9 +236,19 @@ export async function getAnalysisTaskForUser(
 }
 
 export async function listAnalysisTasksForUser(input: AnalysisListInput) {
-  const repository = getAnalysisRepository();
-  const tasks = await repository.listByUser(input);
-  return tasks.map(toPublicAnalysisTask);
+  try {
+    const repository = getAnalysisRepository();
+    const tasks = await repository.listByUser(input);
+    return tasks.map(toPublicAnalysisTask);
+  } catch (error) {
+    console.error("[analysis] Failed to list tasks for user, returning an empty list.", {
+      userId: input.userId,
+      archived: input.archived ?? false,
+      query: input.query ?? null,
+      error,
+    });
+    return [];
+  }
 }
 
 export async function setAnalysisArchived(

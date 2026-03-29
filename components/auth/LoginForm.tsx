@@ -6,7 +6,11 @@ import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
-export default function LoginForm() {
+export default function LoginForm({
+  redirectToPath = "/library",
+}: {
+  redirectToPath?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -29,13 +33,13 @@ export default function LoginForm() {
       throw new Error(payload?.error?.message ?? "登录失败，请稍后重试。");
     }
 
-    router.replace("/library");
+    router.replace(redirectToPath);
     router.refresh();
   };
 
   const submitSupabaseLogin = async () => {
     const supabase = createSupabaseBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectToPath)}`;
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -121,7 +125,7 @@ export default function LoginForm() {
           </p>
           <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
             {isSupabaseAuthConfigured()
-              ? "发送邮箱登录链接，点击确认后自动回到当前应用。"
+              ? "发送邮箱登录链接，点击确认后自动回到你刚才要访问的页面。"
               : "使用输入邮箱创建本地演示会话，方便继续联调界面。"}
           </p>
         </div>

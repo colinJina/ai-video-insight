@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
+import {
+  getErrorCode,
+  getErrorStatusCode,
+  getPublicErrorMessage,
+} from "@/lib/analysis/errors";
 import type { AppThemePreference } from "@/lib/app/types";
-import { requireAppSession } from "@/lib/auth/guards";
+import { requireAppApiSession } from "@/lib/auth/guards";
 import { getSettingsForUser, upsertSettingsForUser } from "@/lib/settings/service";
 
 type SettingsPayload = {
@@ -12,21 +17,45 @@ type SettingsPayload = {
 };
 
 export async function GET() {
-  const session = await requireAppSession();
-  const settings = await getSettingsForUser(session.user.id);
-  return NextResponse.json({ settings });
+  try {
+    const session = await requireAppApiSession();
+    const settings = await getSettingsForUser(session.user.id);
+    return NextResponse.json({ settings });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: {
+          code: getErrorCode(error),
+          message: getPublicErrorMessage(error),
+        },
+      },
+      { status: getErrorStatusCode(error) },
+    );
+  }
 }
 
 export async function PUT(request: Request) {
-  const session = await requireAppSession();
-  const body = (await request.json().catch(() => null)) as SettingsPayload | null;
+  try {
+    const session = await requireAppApiSession();
+    const body = (await request.json().catch(() => null)) as SettingsPayload | null;
 
-  const settings = await upsertSettingsForUser(session.user.id, {
-    nickname: body?.nickname?.trim() || null,
-    avatarUrl: body?.avatarUrl?.trim() || null,
-    notificationsEnabled: body?.notificationsEnabled ?? true,
-    themePreference: body?.themePreference ?? "system",
-  });
+    const settings = await upsertSettingsForUser(session.user.id, {
+      nickname: body?.nickname?.trim() || null,
+      avatarUrl: body?.avatarUrl?.trim() || null,
+      notificationsEnabled: body?.notificationsEnabled ?? true,
+      themePreference: body?.themePreference ?? "system",
+    });
 
-  return NextResponse.json({ settings });
+    return NextResponse.json({ settings });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: {
+          code: getErrorCode(error),
+          message: getPublicErrorMessage(error),
+        },
+      },
+      { status: getErrorStatusCode(error) },
+    );
+  }
 }

@@ -13,8 +13,16 @@ export function getDefaultSettings(userId: string): UserSettings {
 }
 
 export async function getSettingsForUser(userId: string) {
-  const existing = await getSettingsRepository().getByUserId(userId);
-  return existing ?? getDefaultSettings(userId);
+  try {
+    const existing = await getSettingsRepository().getByUserId(userId);
+    return existing ?? getDefaultSettings(userId);
+  } catch (error) {
+    console.error("[settings] Failed to load user settings, falling back to defaults.", {
+      userId,
+      error,
+    });
+    return getDefaultSettings(userId);
+  }
 }
 
 export async function upsertSettingsForUser(

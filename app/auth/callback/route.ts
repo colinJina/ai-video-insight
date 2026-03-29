@@ -6,9 +6,13 @@ import {
   getSupabaseUrl,
   isSupabaseAuthConfigured,
 } from "@/lib/supabase/env";
+import { sanitizeRedirectPath } from "@/lib/auth/utils";
 
 export async function GET(request: NextRequest) {
-  const redirectUrl = new URL("/library", request.url);
+  const redirectUrl = new URL(
+    sanitizeRedirectPath(request.nextUrl.searchParams.get("next")),
+    request.url,
+  );
 
   if (!isSupabaseAuthConfigured()) {
     return NextResponse.redirect(redirectUrl);
