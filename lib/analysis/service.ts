@@ -14,6 +14,7 @@ import {
   toPublicAnalysisTask,
 } from "@/lib/analysis/repository";
 import { buildAnalysisResult } from "@/lib/analysis/result";
+import { isSupabaseBackedUserId } from "@/lib/supabase/user-id";
 import type {
   AnalysisChatMessage,
   AnalysisListInput,
@@ -172,7 +173,8 @@ function ensureAnalysisTaskRunning(id: string) {
   return promise;
 }
 
-export async function createAnalysisTask(
+export async function 
+createAnalysisTask(
   input: CreateAnalysisInput & { userId: string },
 ): Promise<AnalysisPublicTask> {
   const validUrl = assertValidVideoUrl(input.videoUrl);
@@ -197,9 +199,15 @@ export async function createAnalysisTask(
   const repository = getAnalysisRepository();
   const createdTask = await repository.create(task);
 
-  void ensureAnalysisTaskRunning(createdTask.id);
+  if (isSupabaseBackedUserId(createdTask.userId)) {
+    void ensureAnalysisTaskRunning(createdTask.id);
+    return toPublicAnalysisTask(createdTask);
+  }
 
-  return toPublicAnalysisTask(createdTask);
+  await ensureAnalysisTaskRunning(createdTask.id);
+
+  const completedTask = await repository.findById(createdTask.id);
+  return toPublicAnalysisTask(completedTask ?? createdTask);
 }
 
 export async function getAnalysisTask(id: string): Promise<AnalysisPublicTask> {

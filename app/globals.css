@@ -177,6 +177,20 @@
   animation: node-badge-flicker 1.8s steps(2, end) infinite;
 }
 
+.typewriter-shell {
+  text-wrap: balance;
+}
+
+.typewriter-cursor {
+  width: 0.08em;
+  height: 0.9em;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 18px rgba(255, 182, 136, 0.35);
+  vertical-align: -0.08em;
+  animation: typewriter-caret 1s ease-in-out infinite;
+}
+
 @keyframes pulse-dot {
   0%,
   100% {
@@ -238,6 +252,20 @@
   70% {
     opacity: 1;
     box-shadow: 0 0 18px rgba(255, 183, 128, 0.2);
+  }
+}
+
+@keyframes typewriter-caret {
+  0%,
+  46%,
+  100% {
+    opacity: 0.22;
+    transform: scaleY(0.92);
+  }
+  20%,
+  66% {
+    opacity: 1;
+    transform: scaleY(1);
   }
 }
 

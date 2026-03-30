@@ -16,7 +16,7 @@ type PointerState = {
 
 const analysisItems = [
   { icon: "auto_awesome", label: "AI 分析进度", value: "84%" },
-  { icon: "segment", label: "生成的交互式大纲", value: "Live" },
+  { icon: "segment", label: "可交互时间轴", value: "Live" },
 ];
 
 export default function DashboardShowcase() {
@@ -196,7 +196,7 @@ export default function DashboardShowcase() {
                   Login Preview
                 </p>
                 <h3 className="mt-2 font-headline text-2xl font-bold tracking-[-0.04em] text-white">
-                  登录后即进入知识工作台
+                  登录后立刻进入知识工作台
                 </h3>
               </div>
               <div className="hidden rounded-full border border-primary/20 px-3 py-1 font-headline text-[10px] uppercase tracking-[0.24em] text-primary md:block">
@@ -232,7 +232,7 @@ export default function DashboardShowcase() {
               <div className="rounded-xl border border-[color:rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm text-[color:var(--text-muted)]">
                 you@workspace.ai
               </div>
-              <div className="rounded-xl border border-[color:rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm text-[color:rgba(223,192,175,0.45)]">
+              <div className="rounded-xl border border-[color:rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm tracking-[0.22em] text-[color:rgba(223,192,175,0.45)]">
                 ••••••••••••
               </div>
               <Link

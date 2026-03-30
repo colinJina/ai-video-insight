@@ -1,5 +1,6 @@
 import Link from "next/link";
 import DashboardShowcase from "./DashboardShowcase";
+import HeroTypewriter from "./HeroTypewriter";
 
 export default function HeroSection() {
   return (
@@ -13,10 +14,7 @@ export default function HeroSection() {
 
       <h1 className="font-headline text-5xl font-bold tracking-[-0.06em] text-on-surface sm:text-6xl lg:text-8xl">
         把视频转成知识
-        <br />
-        <span className="bg-gradient-to-r from-primary to-[color:var(--primary-strong)] bg-clip-text text-transparent">
-          登录后即刻抵达
-        </span>
+        <HeroTypewriter />
       </h1>
 
       <p className="mx-auto mt-8 max-w-3xl text-lg leading-8 text-[color:var(--text-muted)] sm:text-xl">

@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-const navItems = ["Product", "Features", "Pricing", "About"];
+const navItems = [
+  { label: "产品", href: "#" },
+  { label: "概览", href: "#overview" },
+  { label: "工作台", href: "/dashboard" },
+  { label: "关于", href: "#" },
+];
 
 export default function LandingNavbar() {
   return (
@@ -16,15 +21,15 @@ export default function LandingNavbar() {
         <div className="hidden items-center gap-8 font-headline text-sm font-bold uppercase tracking-[0.18em] md:flex">
           {navItems.map((item, index) => (
             <a
-              key={item}
+              key={item.label}
               className={
                 index === 0
                   ? "border-b-2 border-orange-400 pb-1 text-orange-400"
                   : "text-stone-400 transition-colors hover:text-stone-200"
               }
-              href="#"
+              href={item.href}
             >
-              {item}
+              {item.label}
             </a>
           ))}
         </div>
@@ -40,7 +45,7 @@ export default function LandingNavbar() {
             href="/dashboard"
             className="rounded-lg bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-2.5 font-headline text-sm font-bold uppercase tracking-[0.16em] text-[color:var(--on-primary)] shadow-[0_20px_40px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03]"
           >
-            Get Started
+            立即体验
           </Link>
         </div>
       </div>

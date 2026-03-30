@@ -1,41 +1,47 @@
 const steps = [
   {
     icon: "link",
-    title: "1. 粘贴 URL",
-    description: "支持 YouTube、Bilibili、TikTok 与本地录屏，系统会自动识别内容结构。",
+    title: "1. 粘贴视频链接",
+    description:
+      "支持 YouTube、Bilibili、TikTok 与本地录屏，系统会自动识别内容结构并拉起分析流程。",
   },
   {
     icon: "neurology",
-    title: "2. AI 处理",
-    description: "语音、字幕、视觉片段与语义节点并行分析，自动生成索引与标签。",
+    title: "2. 等待 AI 建模",
+    description:
+      "语音、字幕、视觉片段与语义节点并行分析，自动生成摘要、标签、时间轴与追问上下文。",
   },
   {
     icon: "insights",
-    title: "3. 获取洞察",
-    description: "摘要、问答、大纲和进度节点统一聚合，登录后就能立即进入工作流。",
+    title: "3. 进入知识工作台",
+    description:
+      "摘要、问答、目录和关键节点统一收束，登录后就能立刻继续浏览、追问和回看。",
   },
 ];
 
 const features = [
   {
-    title: "自动摘要",
+    title: "结构化摘要",
     icon: "auto_awesome_motion",
     accent: "text-primary",
-    description: "基于多模态分析生成结构化摘要，把冗长视频浓缩成几屏可读的结论。",
+    description:
+      "基于多模态分析生成结构化摘要，把冗长视频压缩成几屏内就能读完的关键结论。",
     wide: true,
   },
   {
-    title: "AI 对话",
+    title: "追问式检索",
     icon: "forum",
     accent: "text-secondary",
-    description: "像和内容本身对话一样提问，快速定位人物、观点与关键时间点。",
+    description:
+      "像和内容本身对话一样继续发问，快速定位人物、观点、转折点与关键时间段。",
     wide: false,
   },
   {
-    title: "交互式大纲",
+    title: "时间轴大纲",
     icon: "list_alt",
     accent: "text-primary",
-    description: "自动标注时间节点，点击任意大纲即可跳转到视频的对应时刻。",
+    description:
+      "自动标注内容节点，点击任意条目就能跳回对应时刻，不再手动拖动进度条。",
     wide: false,
   },
 ];
@@ -46,7 +52,7 @@ export default function OverviewSection() {
       <section id="overview" className="mx-auto max-w-7xl px-4 py-28 sm:px-6 lg:px-8">
         <div className="mb-16 text-center">
           <h2 className="font-headline text-4xl font-bold tracking-[-0.04em] text-white">
-            极简三步，即刻洞察
+            三步完成，从视频到洞察
           </h2>
           <div className="mx-auto mt-5 h-1 w-24 rounded-full bg-primary/60" />
         </div>
@@ -78,11 +84,11 @@ export default function OverviewSection() {
           <div className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <h2 className="font-headline text-4xl font-bold tracking-[-0.05em] text-white md:text-5xl">
-                覆盖从浏览到登录后的整段智能体验
+                覆盖从浏览入口到登录后的整段智能体验
               </h2>
               <p className="mt-6 text-lg leading-8 text-[color:var(--text-muted)]">
-                首页负责把能力讲清楚，登录后负责把知识真正交到你手里。视觉上我们保持同一套 Amber Synth 语言，
-                让用户从入场到工作台的感受是连续的。
+                首页负责把能力讲清楚，登录后负责把知识真正交到你手里。视觉上我们保持同一套 amber
+                obsidian 语言，让用户从首次进入到进入工作台的感受是连续的。
               </p>
             </div>
             <div className="pb-2">
