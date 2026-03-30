@@ -34,6 +34,67 @@ function buildLoginHref(targetPath: string) {
   return `/login?next=${encodeURIComponent(sanitizeRedirectPath(targetPath))}`;
 }
 
+function NotificationIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M15.5 17.5H4.5c.8-.8 1.5-1.9 1.8-3.1.3-1.3.2-2.7.2-4.2C6.5 6.3 8.8 4 12 4s5.5 2.3 5.5 6.2c0 1.5-.1 2.9.2 4.2.3 1.2 1 2.3 1.8 3.1H15.5Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M10.2 19.2c.4.5 1 .8 1.8.8s1.4-.3 1.8-.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M17.4 8.9c.5-1.8.2-3.6-.9-5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <circle cx="18.4" cy="4.4" fill="currentColor" r="1.1" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.4"
+      />
+      <path
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </svg>
+  );
+}
+
 export default function Navbar({
   currentUser = null,
   unreadCount = 0,
@@ -147,10 +208,14 @@ export default function Navbar({
 
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
-              className="relative rounded-full p-2 text-[color:var(--text-muted)] transition-all hover:bg-primary/10 hover:text-primary"
-              href={currentUser ? "/notifications" : buildLoginHref("/notifications")}
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-[color:var(--text-muted)] transition-all hover:border-[color:rgba(255,127,0,0.18)] hover:bg-primary/10 hover:text-primary"
+              href={
+                currentUser
+                  ? "/notifications"
+                  : buildLoginHref("/notifications")
+              }
             >
-              <span className="material-symbols-outlined">notifications</span>
+              <NotificationIcon className="h-5 w-5" />
               {unreadCount > 0 ? (
                 <span className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-[color:var(--primary-strong)] px-1.5 py-0.5 text-center font-headline text-[10px] font-bold leading-none text-[color:var(--on-primary)]">
                   {unreadCount > 99 ? "99+" : unreadCount}
@@ -158,10 +223,10 @@ export default function Navbar({
               ) : null}
             </Link>
             <Link
-              className="rounded-full p-2 text-[color:var(--text-muted)] transition-all hover:bg-primary/10 hover:text-primary"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-[color:var(--text-muted)] transition-all hover:border-[color:rgba(255,127,0,0.18)] hover:bg-primary/10 hover:text-primary"
               href={currentUser ? "/settings" : buildLoginHref("/settings")}
             >
-              <span className="material-symbols-outlined">settings</span>
+              <SettingsIcon className="h-5 w-5" />
             </Link>
 
             {currentUser ? (
