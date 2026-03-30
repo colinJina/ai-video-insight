@@ -1,3 +1,5 @@
+import RevealOnView from "./RevealOnView";
+
 const steps = [
   {
     icon: "link",
@@ -49,7 +51,11 @@ const features = [
 export default function OverviewSection() {
   return (
     <>
-      <section id="overview" className="mx-auto max-w-7xl px-4 py-28 sm:px-6 lg:px-8">
+      <RevealOnView
+        as="section"
+        id="overview"
+        className="mx-auto max-w-7xl px-4 py-28 sm:px-6 lg:px-8"
+      >
         <div className="mb-16 text-center">
           <h2 className="font-headline text-4xl font-bold tracking-[-0.04em] text-white">
             三步完成，从视频到洞察
@@ -59,7 +65,11 @@ export default function OverviewSection() {
 
         <div className="grid gap-10 md:grid-cols-3 md:gap-12">
           {steps.map((step, index) => (
-            <div key={step.title} className="relative text-center">
+            <RevealOnView
+              key={step.title}
+              className="relative text-center"
+              delay={index * 0.12}
+            >
               <div className="obsidian-shadow glass-card relative mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full transition-transform duration-300 hover:scale-110">
                 <span className="material-symbols-outlined text-4xl text-primary">
                   {step.icon}
@@ -68,25 +78,25 @@ export default function OverviewSection() {
               <h3 className="font-headline text-xl font-bold text-white">
                 {step.title}
               </h3>
-              <p className="mt-4 leading-7 text-[color:var(--text-muted)]">
+              <p className="mt-4 leading-7 text-(--text-muted)">
                 {step.description}
               </p>
               {index < steps.length - 1 ? (
-                <div className="absolute right-[-2rem] top-12 hidden h-px w-16 bg-[color:rgba(88,66,53,0.35)] md:block" />
+                <div className="absolute -right-8 top-12 hidden h-px w-16 bg-[rgba(88,66,53,0.35)] md:block" />
               ) : null}
-            </div>
+            </RevealOnView>
           ))}
         </div>
-      </section>
+      </RevealOnView>
 
-      <section className="bg-surface-container-low/50 py-28">
+      <RevealOnView as="section" className="bg-surface-container-low/50 py-28" delay={0.1}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <h2 className="font-headline text-4xl font-bold tracking-[-0.05em] text-white md:text-5xl">
                 覆盖从浏览入口到登录后的整段智能体验
               </h2>
-              <p className="mt-6 text-lg leading-8 text-[color:var(--text-muted)]">
+              <p className="mt-6 text-lg leading-8 text-(--text-muted)">
                 首页负责把能力讲清楚，登录后负责把知识真正交到你手里。视觉上我们保持同一套 amber
                 obsidian 语言，让用户从首次进入到进入工作台的感受是连续的。
               </p>
@@ -100,13 +110,14 @@ export default function OverviewSection() {
 
           <div className="grid gap-6 md:grid-cols-3">
             {features.map((feature) => (
-              <div
+              <RevealOnView
                 key={feature.title}
                 className={
                   feature.wide
                     ? "glass-card obsidian-shadow rounded-[1.6rem] p-8 transition-colors hover:bg-surface-container-highest/60 md:col-span-2"
                     : "glass-card obsidian-shadow rounded-[1.6rem] p-8 transition-colors hover:bg-surface-container-highest/60"
                 }
+                delay={feature.wide ? 0.06 : 0.14}
               >
                 <span className={`material-symbols-outlined mb-6 text-3xl ${feature.accent}`}>
                   {feature.icon}
@@ -114,12 +125,12 @@ export default function OverviewSection() {
                 <h3 className="font-headline text-2xl font-bold text-white">
                   {feature.title}
                 </h3>
-                <p className="mt-4 leading-7 text-[color:var(--text-muted)]">
+                <p className="mt-4 leading-7 text-(--text-muted)">
                   {feature.description}
                 </p>
 
                 {feature.wide ? (
-                  <div className="mt-8 rounded-[1rem] border border-[color:rgba(88,66,53,0.14)] bg-surface-container-low p-4">
+                  <div className="mt-8 rounded-2xl border border-[rgba(88,66,53,0.14)] bg-surface-container-low p-4">
                     <div className="space-y-3">
                       <div className="h-3 w-full rounded bg-primary/20" />
                       <div className="h-3 w-4/5 rounded bg-white/8" />
@@ -128,10 +139,13 @@ export default function OverviewSection() {
                     </div>
                   </div>
                 ) : null}
-              </div>
+              </RevealOnView>
             ))}
 
-            <div className="glass-card obsidian-shadow relative overflow-hidden rounded-[1.6rem] p-8 transition-colors hover:bg-surface-container-highest/60 md:col-span-2">
+            <RevealOnView
+              className="glass-card obsidian-shadow relative overflow-hidden rounded-[1.6rem] p-8 transition-colors hover:bg-surface-container-highest/60 md:col-span-2"
+              delay={0.2}
+            >
               <div className="relative z-10 grid gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-center">
                 <div>
                   <span className="material-symbols-outlined mb-6 text-3xl text-primary">
@@ -140,7 +154,7 @@ export default function OverviewSection() {
                   <h3 className="font-headline text-2xl font-bold text-white">
                     多平台输入
                   </h3>
-                  <p className="mt-4 leading-7 text-[color:var(--text-muted)]">
+                  <p className="mt-4 leading-7 text-(--text-muted)">
                     无缝接入 YouTube、Bilibili、TikTok、Zoom 录屏和本地素材，保持统一的知识入口。
                   </p>
                 </div>
@@ -148,14 +162,14 @@ export default function OverviewSection() {
                   <div className="aspect-square rounded-lg bg-secondary" />
                   <div className="aspect-square rounded-lg bg-primary" />
                   <div className="aspect-square rounded-lg bg-surface-container-highest" />
-                  <div className="aspect-square rounded-lg bg-[color:rgba(88,66,53,0.9)]" />
+                  <div className="aspect-square rounded-lg bg-[rgba(88,66,53,0.9)]" />
                 </div>
               </div>
               <div className="absolute inset-y-0 right-0 w-1/3 bg-primary/5 blur-3xl" />
-            </div>
+            </RevealOnView>
           </div>
         </div>
-      </section>
+      </RevealOnView>
     </>
   );
 }

@@ -85,17 +85,17 @@ export default function DashboardShowcase() {
     >
       <div className="pointer-events-none absolute inset-0 rounded-full bg-primary/20 blur-[100px] opacity-60 transition-all duration-700" />
 
-      <div className="glass-card obsidian-shadow relative overflow-hidden rounded-[1.75rem] border border-[color:rgba(88,66,53,0.28)] p-4 md:p-8">
-        <div className="absolute inset-x-[16%] top-0 h-40 bg-gradient-to-b from-primary/10 to-transparent blur-3xl" />
+      <div className="glass-card obsidian-shadow relative overflow-hidden rounded-[1.75rem] border border-[rgba(88,66,53,0.28)] p-4 md:p-8">
+        <div className="absolute inset-x-[16%] top-0 h-40 bg-linear-to-b from-primary/10 to-transparent blur-3xl" />
 
-        <div className="relative mb-6 flex items-center gap-4 border-b border-[color:rgba(88,66,53,0.12)] pb-4">
+        <div className="relative mb-6 flex items-center gap-4 border-b border-[rgba(88,66,53,0.12)] pb-4">
           <div className="flex gap-1.5">
             <div className="h-3 w-3 rounded-full bg-red-500/50" />
             <div className="h-3 w-3 rounded-full bg-amber-500/50" />
             <div className="h-3 w-3 rounded-full bg-green-500/50" />
           </div>
           <HeroTypewriter
-            className="min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-container-low px-4 py-1.5 font-mono text-xs text-[color:rgba(223,192,175,0.75)]"
+            className="min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-container-low px-4 py-1.5 font-mono text-xs text-[rgba(223,192,175,0.75)]"
             deleteDelay={22}
             locale="en-US"
             pauseDelay={1800}
@@ -122,7 +122,7 @@ export default function DashboardShowcase() {
               fill
               sizes="(min-width: 768px) 66vw, 100vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="material-symbols-outlined text-7xl text-primary/80">
                 play_circle
@@ -170,7 +170,7 @@ export default function DashboardShowcase() {
                       className={
                         index === 0
                           ? "text-xs font-bold text-on-surface"
-                          : "text-xs text-[color:var(--text-muted)]"
+                          : "text-xs text-(--text-muted)"
                       }
                     >
                       {item.label}
@@ -192,7 +192,7 @@ export default function DashboardShowcase() {
         </div>
 
         <div
-          className="parallax-layer mt-8 grid gap-4 rounded-[1.3rem] border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(14,9,5,0.58)] p-5 md:grid-cols-[1.4fr_0.9fr]"
+          className="parallax-layer mt-8 grid gap-4 rounded-[1.3rem] border border-[rgba(88,66,53,0.16)] bg-[rgba(14,9,5,0.58)] p-5 md:grid-cols-[1.4fr_0.9fr]"
           style={
             {
               "--depth-x": "0.25",
@@ -216,39 +216,39 @@ export default function DashboardShowcase() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-[color:rgba(88,66,53,0.2)] bg-surface-container-low p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--text-muted)]">
+              <div className="rounded-xl border border-[rgba(88,66,53,0.2)] bg-surface-container-low p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-(--text-muted)">
                   Workspaces
                 </p>
                 <p className="mt-3 font-headline text-xl font-semibold text-white">
                   18 个视频项目
                 </p>
               </div>
-              <div className="rounded-xl border border-[color:rgba(88,66,53,0.2)] bg-surface-container-low p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--text-muted)]">
+              <div className="rounded-xl border border-[rgba(88,66,53,0.2)] bg-surface-container-low p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-(--text-muted)">
                   AI Progress
                 </p>
-                <div className="mt-4 h-2 rounded-full bg-[color:rgba(88,66,53,0.32)]">
-                  <div className="progress-sheen h-full w-[84%] rounded-full bg-gradient-to-r from-primary to-[color:var(--primary-strong)]" />
+                <div className="mt-4 h-2 rounded-full bg-[rgba(88,66,53,0.32)]">
+                  <div className="progress-sheen h-full w-[84%] rounded-full bg-linear-to-r from-primary to-(--primary-strong)" />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[1.1rem] border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(34,20,10,0.78)] p-5">
+          <div className="rounded-[1.1rem] border border-[rgba(88,66,53,0.16)] bg-[rgba(34,20,10,0.78)] p-5">
             <p className="font-headline text-[10px] uppercase tracking-[0.28em] text-secondary">
               Account Access
             </p>
             <div className="mt-4 space-y-3">
-              <div className="rounded-xl border border-[color:rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm text-[color:var(--text-muted)]">
+              <div className="rounded-xl border border-[rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm text-(--text-muted)">
                 you@workspace.ai
               </div>
-              <div className="rounded-xl border border-[color:rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm tracking-[0.22em] text-[color:rgba(223,192,175,0.45)]">
+              <div className="rounded-xl border border-[rgba(88,66,53,0.22)] bg-black/20 px-4 py-3 text-sm tracking-[0.22em] text-[rgba(223,192,175,0.45)]">
                 ••••••••••••
               </div>
               <Link
                 href="/dashboard"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02]"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-linear-to-br from-primary to-(--primary-strong) px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-(--on-primary) transition-transform hover:scale-[1.02]"
               >
                 登录并进入工作台
               </Link>

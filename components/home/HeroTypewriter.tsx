@@ -60,7 +60,7 @@ function getFontShorthand(style: CSSStyleDeclaration) {
 }
 
 export default function HeroTypewriter({
-  className = "mt-3 block bg-gradient-to-r from-primary via-[color:var(--primary-strong)] to-[#ffd1a6] bg-clip-text text-transparent",
+  className = "mt-3 block bg-linear-to-r from-primary via-(--primary-strong) to-[#ffd1a6] bg-clip-text text-transparent",
   deleteDelay = 38,
   locale = "zh-CN",
   pauseDelay = 1500,
