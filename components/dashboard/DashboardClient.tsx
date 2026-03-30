@@ -4,12 +4,11 @@ import {
   startTransition,
   useEffect,
   useEffectEvent,
-  useRef,
   useState,
 } from "react";
 
 import AiPanel from "@/components/AiPanel";
-import VideoSection, { type VideoSectionHandle } from "@/components/VideoSection";
+import VideoSection from "@/components/VideoSection";
 import type {
   AnalysisPublicTask,
   AnalysisTaskStatus,
@@ -19,8 +18,6 @@ import { isRecord } from "@/lib/analysis/utils";
 
 const DEFAULT_VIDEO_URL =
   "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
-
-const DIRECT_VIDEO_FILE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
 
 type AnalysisResponse = {
   analysis: AnalysisPublicTask;
@@ -36,27 +33,6 @@ function mapTaskStatusToView(status: AnalysisTaskStatus): AnalysisViewStatus {
   }
 
   return "error";
-}
-
-function looksLikeDirectVideoUrl(value: string) {
-  return DIRECT_VIDEO_FILE_PATTERN.test(value.trim());
-}
-
-function getSafeExternalUrl(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const url = new URL(value);
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      return url.toString();
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function formatDurationLabel(durationSeconds: number | null | undefined) {
@@ -108,10 +84,7 @@ function buildStatusMessage(
   return "输入公开可访问的视频链接后，点击“开始分析”即可创建服务端任务。";
 }
 
-function buildVideoMetrics(
-  analysis: AnalysisPublicTask | null,
-  previewVideoUrl: string | null,
-) {
+function buildVideoMetrics(analysis: AnalysisPublicTask | null, posterUrl: string | null) {
   return [
     {
       icon: "link",
@@ -124,10 +97,8 @@ function buildVideoMetrics(
       label: formatDurationLabel(analysis?.video.durationSeconds),
     },
     {
-      icon: "play_circle",
-      label: previewVideoUrl
-        ? "当前链接支持页面内预览"
-        : "部分网页链接仅支持分析，不支持内嵌播放",
+      icon: "image",
+      label: posterUrl ? "封面已解析" : "当前未解析到封面图",
     },
     {
       icon: "text_snippet",
@@ -175,8 +146,6 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 export default function DashboardClient() {
-  const videoRef = useRef<VideoSectionHandle | null>(null);
-
   const [videoUrl, setVideoUrl] = useState(DEFAULT_VIDEO_URL);
   const [analysis, setAnalysis] = useState<AnalysisPublicTask | null>(null);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
@@ -238,7 +207,7 @@ export default function DashboardClient() {
         clearTimeout(timeoutId);
       }
     };
-  }, [activeAnalysisId, viewStatus]);
+  }, [activeAnalysisId, pollAnalysis, viewStatus]);
 
   const handleAnalyze = async () => {
     setChatError(null);
@@ -289,11 +258,7 @@ export default function DashboardClient() {
     }
   };
 
-  const previewVideoUrl =
-    analysis?.video.playableUrl ??
-    (looksLikeDirectVideoUrl(videoUrl) ? videoUrl.trim() : null);
   const posterUrl = analysis?.video.posterUrl ?? null;
-  const sourceUrl = getSafeExternalUrl(analysis?.video.normalizedUrl ?? videoUrl.trim());
   const title =
     analysis?.result?.title ?? analysis?.video.title ?? "输入视频链接，开始生成视频摘要";
   const description =
@@ -301,24 +266,20 @@ export default function DashboardClient() {
     analysis?.video.description ??
     "服务端会校验链接、提取基础信息、获取字幕或真实转写，并生成结构化概要与问答上下文。";
   const statusMessage = buildStatusMessage(viewStatus, analysis, errorMessage);
-  const metrics = buildVideoMetrics(analysis, previewVideoUrl);
+  const metrics = buildVideoMetrics(analysis, posterUrl);
 
   return (
     <div className="flex w-full flex-col gap-8 lg:flex-row lg:pb-12">
       <div className="w-full lg:w-[62%]">
         <VideoSection
-          ref={videoRef}
-          authoritativeDurationSeconds={analysis?.video.durationSeconds ?? null}
           description={description}
           metrics={metrics}
           onAnalyze={handleAnalyze}
           onVideoUrlChange={setVideoUrl}
           posterSrc={posterUrl}
-          sourceUrl={sourceUrl}
           status={viewStatus}
           statusMessage={statusMessage}
           title={title}
-          videoSrc={previewVideoUrl}
           videoUrl={videoUrl}
         />
       </div>
@@ -327,9 +288,6 @@ export default function DashboardClient() {
           analysis={analysis}
           chatError={chatError}
           isChatPending={isChatPending}
-          onOutlineClick={(seconds) => {
-            videoRef.current?.seekTo(seconds);
-          }}
           onSendMessage={handleSendMessage}
           viewStatus={viewStatus}
         />

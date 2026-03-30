@@ -3,11 +3,21 @@
 import { layoutWithLines, prepareWithSegments, setLocale } from "@chenglou/pretext";
 import { useEffect, useRef, useState } from "react";
 
-const TYPEWRITER_PHRASES = [
+const DEFAULT_TYPEWRITER_PHRASES = [
   "登录后即刻抵达",
   "压缩成关键结论",
   "回到可搜索的知识",
 ];
+
+type HeroTypewriterProps = {
+  className?: string;
+  deleteDelay?: number;
+  locale?: string;
+  pauseDelay?: number;
+  phrases?: string[];
+  restartDelay?: number;
+  typeDelay?: number;
+};
 
 const segmenter =
   typeof Intl !== "undefined" && "Segmenter" in Intl
@@ -49,7 +59,15 @@ function getFontShorthand(style: CSSStyleDeclaration) {
     .join(" ");
 }
 
-export default function HeroTypewriter() {
+export default function HeroTypewriter({
+  className = "mt-3 block bg-gradient-to-r from-primary via-[color:var(--primary-strong)] to-[#ffd1a6] bg-clip-text text-transparent",
+  deleteDelay = 38,
+  locale = "zh-CN",
+  pauseDelay = 1500,
+  phrases = DEFAULT_TYPEWRITER_PHRASES,
+  restartDelay = 260,
+  typeDelay = 82,
+}: HeroTypewriterProps) {
   const frameRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const textRef = useRef<HTMLSpanElement | null>(null);
@@ -64,13 +82,13 @@ export default function HeroTypewriter() {
     reservedHeight: number;
   } | null>(null);
 
-  const activePhrase = TYPEWRITER_PHRASES[activeIndex] ?? TYPEWRITER_PHRASES[0];
+  const activePhrase = phrases[activeIndex] ?? phrases[0] ?? "";
   const activeSegments = splitGraphemes(activePhrase);
   const visibleText = activeSegments.slice(0, visibleCount).join("");
 
   useEffect(() => {
-    setLocale("zh-CN");
-  }, []);
+    setLocale(locale);
+  }, [locale]);
 
   useEffect(() => {
     const element = textRef.current;
@@ -89,7 +107,7 @@ export default function HeroTypewriter() {
 
       const font = getFontShorthand(style);
       const lineHeight = getLineHeight(style);
-      const reservedHeight = TYPEWRITER_PHRASES.reduce((maxHeight, phrase) => {
+      const reservedHeight = phrases.reduce((maxHeight, phrase) => {
         const prepared = prepareWithSegments(phrase, font);
         const { height } = layoutWithLines(prepared, width, lineHeight);
         return Math.max(maxHeight, height);
@@ -119,18 +137,18 @@ export default function HeroTypewriter() {
         cancelAnimationFrame(frameRef.current);
       }
     };
-  }, []);
+  }, [phrases]);
 
   useEffect(() => {
     const atPhraseEnd = visibleCount >= activeSegments.length;
     const atPhraseStart = visibleCount === 0;
 
-    let delay = isDeleting ? 38 : 82;
+    let delay = isDeleting ? deleteDelay : typeDelay;
 
     if (!isDeleting && atPhraseEnd) {
-      delay = 1500;
+      delay = pauseDelay;
     } else if (isDeleting && atPhraseStart) {
-      delay = 260;
+      delay = restartDelay;
     }
 
     timeoutRef.current = window.setTimeout(() => {
@@ -141,7 +159,7 @@ export default function HeroTypewriter() {
 
       if (isDeleting && atPhraseStart) {
         setIsDeleting(false);
-        setActiveIndex((current) => (current + 1) % TYPEWRITER_PHRASES.length);
+        setActiveIndex((current) => (current + 1) % phrases.length);
         return;
       }
 
@@ -153,7 +171,16 @@ export default function HeroTypewriter() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [activeSegments.length, isDeleting, visibleCount]);
+  }, [
+    activeSegments.length,
+    deleteDelay,
+    isDeleting,
+    pauseDelay,
+    phrases.length,
+    restartDelay,
+    typeDelay,
+    visibleCount,
+  ]);
 
   const lines =
     metrics && visibleText
@@ -167,7 +194,7 @@ export default function HeroTypewriter() {
   return (
     <span
       ref={textRef}
-      className="typewriter-shell mt-3 block bg-gradient-to-r from-primary via-[color:var(--primary-strong)] to-[#ffd1a6] bg-clip-text text-transparent"
+      className={`typewriter-shell ${className}`}
       style={{
         minHeight: metrics ? `${metrics.reservedHeight}px` : undefined,
       }}

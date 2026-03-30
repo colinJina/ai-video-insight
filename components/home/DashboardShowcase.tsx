@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import HeroTypewriter from "./HeroTypewriter";
 import {
   type CSSProperties,
   useEffect,
@@ -17,6 +18,10 @@ type PointerState = {
 const analysisItems = [
   { icon: "auto_awesome", label: "AI 分析进度", value: "84%" },
   { icon: "segment", label: "可交互时间轴", value: "Live" },
+];
+
+const VIDEO_URL_PHRASES = [
+  "https://youtube.com/watch?v=ai-video-insight...",
 ];
 
 export default function DashboardShowcase() {
@@ -89,9 +94,15 @@ export default function DashboardShowcase() {
             <div className="h-3 w-3 rounded-full bg-amber-500/50" />
             <div className="h-3 w-3 rounded-full bg-green-500/50" />
           </div>
-          <div className="rounded-lg bg-surface-container-low px-4 py-1.5 font-mono text-xs text-[color:rgba(223,192,175,0.75)]">
-            https://youtube.com/watch?v=ai-video-insight...
-          </div>
+          <HeroTypewriter
+            className="min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-container-low px-4 py-1.5 font-mono text-xs text-[color:rgba(223,192,175,0.75)]"
+            deleteDelay={22}
+            locale="en-US"
+            pauseDelay={1800}
+            phrases={VIDEO_URL_PHRASES}
+            restartDelay={420}
+            typeDelay={30}
+          />
         </div>
 
         <div className="grid grid-cols-12 gap-6">
