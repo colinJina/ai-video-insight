@@ -43,12 +43,14 @@ export default function LoginForm({
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<OAuthProvider | "demo" | null>(
+  const [activeProvider, setActiveProvider] = useState<OAuthProvider | "email" | "demo" | null>(
     null,
   );
+  const [isAwaitingEmailCode, setIsAwaitingEmailCode] = useState(false);
 
   const submitDemoLogin = async () => {
     const response = await fetch("/api/auth/demo-login", {
@@ -87,6 +89,54 @@ export default function LoginForm({
     }
   };
 
+  const submitEmailCode = async () => {
+    const supabase = createSupabaseBrowserClient();
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectToPath)}`;
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      throw new Error("Please enter your email address first.");
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: {
+        emailRedirectTo: redirectTo,
+      },
+    });
+
+    if (signInError) {
+      throw signInError;
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    const supabase = createSupabaseBrowserClient();
+    const normalizedEmail = email.trim();
+    const normalizedCode = verificationCode.trim();
+
+    if (!normalizedEmail) {
+      throw new Error("Please enter your email address first.");
+    }
+
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      throw new Error("Please enter the 6-digit verification code.");
+    }
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: normalizedEmail,
+      token: normalizedCode,
+      type: "email",
+    });
+
+    if (verifyError) {
+      throw verifyError;
+    }
+
+    router.replace(redirectToPath);
+    router.refresh();
+  };
+
   const handleOAuthLogin = async (provider: OAuthProvider) => {
     setError(null);
     setMessage(null);
@@ -109,9 +159,21 @@ export default function LoginForm({
     setError(null);
     setMessage(null);
     setIsSubmitting(true);
-    setActiveProvider("demo");
+    setActiveProvider(authConfigured ? "email" : "demo");
 
     try {
+      if (authConfigured) {
+        if (isAwaitingEmailCode) {
+          await verifyEmailCode();
+          return;
+        }
+
+        await submitEmailCode();
+        setIsAwaitingEmailCode(true);
+        setMessage("We sent a 6-digit verification code to your email. Enter it below to finish signing in.");
+        return;
+      }
+
       await submitDemoLogin();
     } catch (nextError) {
       setError(
@@ -160,7 +222,7 @@ export default function LoginForm({
       <div className="my-6 flex items-center gap-4">
         <div className="h-px flex-1 bg-[rgba(120,77,42,0.22)]" />
         <span className="text-sm text-[rgba(66,40,24,0.62)]">
-          {authConfigured ? "or use demo email" : "use email"}
+          {authConfigured ? "or use email code" : "use email"}
         </span>
         <div className="h-px flex-1 bg-[rgba(120,77,42,0.22)]" />
       </div>
@@ -170,21 +232,73 @@ export default function LoginForm({
           <span className="sr-only">Email address</span>
           <input
             className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.92)] px-4 py-4 text-[15px] text-[#2f1b0e] outline-none transition-colors placeholder:text-[rgba(120,77,42,0.58)] focus:border-[rgba(191,114,31,0.7)]"
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder={authConfigured ? "Email is used for demo sign-in only" : "your@email.com"}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (authConfigured) {
+                setVerificationCode("");
+                setIsAwaitingEmailCode(false);
+              }
+            }}
+            placeholder="your@email.com"
             type="email"
             value={email}
           />
         </label>
 
+        {authConfigured && isAwaitingEmailCode ? (
+          <label className="block">
+            <span className="sr-only">Verification code</span>
+            <input
+              autoComplete="one-time-code"
+              className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.92)] px-4 py-4 text-[15px] tracking-[0.32em] text-[#2f1b0e] outline-none transition-colors placeholder:text-[rgba(120,77,42,0.58)] focus:border-[rgba(191,114,31,0.7)]"
+              inputMode="numeric"
+              maxLength={6}
+              onChange={(event) =>
+                setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="123456"
+              type="text"
+              value={verificationCode}
+            />
+          </label>
+        ) : null}
+
         <button
           className="w-full rounded-none bg-[linear-gradient(180deg,#c37723_0%,#b56716_100%)] px-5 py-4 font-headline text-sm font-bold uppercase tracking-[0.18em] text-[#fff8ee] shadow-[0_8px_20px_rgba(126,72,14,0.22)] transition-transform hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isSubmitting || (!email.trim() && !authConfigured)}
+          disabled={
+            isSubmitting ||
+            !email.trim() ||
+            (authConfigured && isAwaitingEmailCode && verificationCode.trim().length !== 6)
+          }
           onClick={() => void handleEmailSubmit()}
           type="button"
         >
-          {activeProvider === "demo" ? "Signing In..." : "Send Verification Code"}
+          {activeProvider === "demo"
+            ? "Signing In..."
+            : activeProvider === "email"
+              ? isAwaitingEmailCode
+                ? "Verifying..."
+                : "Sending Code..."
+              : isAwaitingEmailCode
+                ? "Verify Code"
+                : "Send Verification Code"}
         </button>
+
+        {authConfigured && isAwaitingEmailCode ? (
+          <button
+            className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.86)] px-5 py-4 font-body text-sm font-semibold uppercase tracking-[0.14em] text-[#5c3a21] transition-colors hover:bg-[rgba(250,244,232,0.96)] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSubmitting || !email.trim()}
+            onClick={() => {
+              setVerificationCode("");
+              setIsAwaitingEmailCode(false);
+              setMessage("You can request a new 6-digit code for this email.");
+              setError(null);
+            }}
+            type="button"
+          >
+            Change Email
+          </button>
+        ) : null}
       </div>
 
       <p className="mt-5 text-center text-sm leading-7 text-[rgba(66,40,24,0.66)]">
@@ -193,8 +307,7 @@ export default function LoginForm({
 
       {authConfigured ? (
         <p className="mt-3 text-center text-xs leading-6 text-[rgba(66,40,24,0.56)]">
-          Google and GitHub keep using the existing Supabase session flow. The email field above
-          remains a local demo fallback for development.
+          Google, GitHub, and email verification codes all use the existing Supabase session flow.
         </p>
       ) : null}
 
