@@ -12,6 +12,7 @@ const DEFAULT_TYPEWRITER_PHRASES = [
 type HeroTypewriterProps = {
   className?: string;
   deleteDelay?: number;
+  deleteOnComplete?: boolean;
   locale?: string;
   pauseDelay?: number;
   phrases?: string[];
@@ -62,6 +63,7 @@ function getFontShorthand(style: CSSStyleDeclaration) {
 export default function HeroTypewriter({
   className = "mt-3 block bg-linear-to-r from-primary via-(--primary-strong) to-[#ffd1a6] bg-clip-text text-transparent",
   deleteDelay = 38,
+  deleteOnComplete = true,
   locale = "en-US",
   pauseDelay = 1500,
   phrases = DEFAULT_TYPEWRITER_PHRASES,
@@ -146,6 +148,10 @@ export default function HeroTypewriter({
     const doneTyping = visibleCount >= fullLength;
     const doneDeleting = visibleCount === 0;
 
+    if (!deleteOnComplete && doneTyping) {
+      return;
+    }
+
     const nextDelay = isDeleting
       ? deleteDelay
       : doneTyping
@@ -183,6 +189,7 @@ export default function HeroTypewriter({
     activePhrase,
     activeSegments.length,
     deleteDelay,
+    deleteOnComplete,
     isDeleting,
     pauseDelay,
     phrases.length,

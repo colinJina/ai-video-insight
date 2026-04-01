@@ -95,6 +95,7 @@ export default function DashboardShowcase() {
           <HeroTypewriter
             className="min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-container-low px-4 py-1.5 font-mono text-xs text-[rgba(223,192,175,0.75)]"
             deleteDelay={22}
+            deleteOnComplete={false}
             locale="en-US"
             pauseDelay={1800}
             phrases={VIDEO_URL_PHRASES}
