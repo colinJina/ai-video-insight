@@ -5,7 +5,9 @@ import {
   use,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  Suspense,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +20,13 @@ type AuthModalContextValue = {
   closeAuthModal: () => void;
   isOpen: boolean;
   openAuthModal: (nextPath?: string) => void;
+};
+
+type RouteState = {
+  currentHref: string;
+  isOpen: boolean;
+  pathname: string;
+  redirectToPath: string | null;
 };
 
 const AuthModalContext = createContext<AuthModalContextValue | null>(null);
@@ -37,29 +46,57 @@ export function useAuthModal() {
   return context;
 }
 
+function resolveCurrentLocation() {
+  if (typeof window === "undefined") {
+    return "/";
+  }
+
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+function AuthModalRouteSync({
+  onRouteStateChange,
+}: {
+  onRouteStateChange: (nextState: RouteState) => void;
+}) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    onRouteStateChange({
+      currentHref: buildCurrentHref(pathname, new URLSearchParams(searchParams.toString())),
+      isOpen: searchParams.get("auth") === "login",
+      pathname,
+      redirectToPath: sanitizeRedirectPath(searchParams.get("next")),
+    });
+  }, [onRouteStateChange, pathname, searchParams]);
+
+  return null;
+}
+
 export default function AuthModalProvider({
   children,
 }: {
   children: ReactNode;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [routeState, setRouteState] = useState<RouteState>({
+    currentHref: "/",
+    isOpen: false,
+    pathname: "/",
+    redirectToPath: null,
+  });
   const [isVisible, setIsVisible] = useState(false);
+  const lastRenderedHrefRef = useRef(routeState.currentHref);
 
-  const currentHref = useMemo(
-    () => buildCurrentHref(pathname, new URLSearchParams(searchParams.toString())),
-    [pathname, searchParams],
-  );
-  const isOpen = searchParams.get("auth") === "login";
-  const redirectToPath = sanitizeRedirectPath(searchParams.get("next"));
+  lastRenderedHrefRef.current = routeState.currentHref;
 
   useEffect(() => {
-    setIsVisible(isOpen);
-  }, [isOpen]);
+    setIsVisible(routeState.isOpen);
+  }, [routeState.isOpen]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!routeState.isOpen) {
       return;
     }
 
@@ -68,7 +105,9 @@ export default function AuthModalProvider({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        router.replace(stripAuthModalParams(currentHref), { scroll: false });
+        router.replace(stripAuthModalParams(lastRenderedHrefRef.current), {
+          scroll: false,
+        });
       }
     };
 
@@ -78,24 +117,31 @@ export default function AuthModalProvider({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [currentHref, isOpen, router]);
+  }, [routeState.isOpen, router]);
 
   const value = useMemo<AuthModalContextValue>(
     () => ({
       closeAuthModal() {
-        router.replace(stripAuthModalParams(currentHref), { scroll: false });
+        router.replace(stripAuthModalParams(resolveCurrentLocation()), {
+          scroll: false,
+        });
       },
-      isOpen,
-      openAuthModal(nextPath = pathname) {
-        router.push(buildAuthModalHref(currentHref, nextPath), { scroll: false });
+      isOpen: routeState.isOpen,
+      openAuthModal(nextPath = routeState.pathname) {
+        router.push(buildAuthModalHref(resolveCurrentLocation(), nextPath), {
+          scroll: false,
+        });
       },
     }),
-    [currentHref, isOpen, pathname, router],
+    [routeState.isOpen, routeState.pathname, router],
   );
 
   return (
     <AuthModalContext value={value}>
       {children}
+      <Suspense fallback={null}>
+        <AuthModalRouteSync onRouteStateChange={setRouteState} />
+      </Suspense>
       {isVisible ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 sm:px-6">
           <button
@@ -131,7 +177,7 @@ export default function AuthModalProvider({
                   </p>
                 </div>
 
-                <LoginForm redirectToPath={redirectToPath} />
+                <LoginForm redirectToPath={routeState.redirectToPath ?? undefined} />
               </div>
             </div>
           </div>
