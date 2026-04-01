@@ -6,9 +6,9 @@ export default function ArchiveLoading() {
   return (
     <AppShell compact>
       <PageHeader
-        description="正在读取归档内容，请稍候。"
+        description="Loading archived records."
         eyebrow="Archive"
-        title="归档"
+        title="Archive"
       />
       <AnalysisGridSkeleton />
     </AppShell>

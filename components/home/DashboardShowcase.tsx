@@ -2,13 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { type CSSProperties, useEffect, useEffectEvent, useRef } from "react";
+
+import { buildAuthModalHref } from "@/lib/auth/modal";
 import HeroTypewriter from "./HeroTypewriter";
-import {
-  type CSSProperties,
-  useEffect,
-  useEffectEvent,
-  useRef,
-} from "react";
 
 type PointerState = {
   x: number;
@@ -16,8 +13,8 @@ type PointerState = {
 };
 
 const analysisItems = [
-  { icon: "auto_awesome", label: "AI 分析进度", value: "84%" },
-  { icon: "segment", label: "可交互时间轴", value: "Live" },
+  { icon: "auto_awesome", label: "AI Analysis Progress", value: "84%" },
+  { icon: "segment", label: "Interactive Timeline", value: "Live" },
 ];
 
 const VIDEO_URL_PHRASES = [
@@ -27,6 +24,7 @@ const VIDEO_URL_PHRASES = [
 export default function DashboardShowcase() {
   const showcaseRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | null>(null);
+  const loginHref = buildAuthModalHref("/", "/dashboard");
 
   const applyPointer = useEffectEvent((pointer: PointerState) => {
     const element = showcaseRef.current;
@@ -108,12 +106,7 @@ export default function DashboardShowcase() {
         <div className="grid grid-cols-12 gap-6">
           <div
             className="parallax-layer col-span-12 aspect-video overflow-hidden rounded-[1.2rem] bg-black/40 md:col-span-8"
-            style={
-              {
-                "--depth-x": "0.42",
-                "--depth-y": "0.48",
-              } as CSSProperties
-            }
+            style={{ "--depth-x": "0.42", "--depth-y": "0.48" } as CSSProperties}
           >
             <Image
               alt="AI dashboard visual"
@@ -132,12 +125,7 @@ export default function DashboardShowcase() {
 
           <div
             className="parallax-layer col-span-12 space-y-4 md:col-span-4"
-            style={
-              {
-                "--depth-x": "0.7",
-                "--depth-y": "0.78",
-              } as CSSProperties
-            }
+            style={{ "--depth-x": "0.7", "--depth-y": "0.78" } as CSSProperties}
           >
             <div className="h-8 w-3/4 rounded-lg bg-surface-container-highest/50" />
             <div className="space-y-2">
@@ -193,12 +181,7 @@ export default function DashboardShowcase() {
 
         <div
           className="parallax-layer mt-8 grid gap-4 rounded-[1.3rem] border border-[rgba(88,66,53,0.16)] bg-[rgba(14,9,5,0.58)] p-5 md:grid-cols-[1.4fr_0.9fr]"
-          style={
-            {
-              "--depth-x": "0.25",
-              "--depth-y": "0.3",
-            } as CSSProperties
-          }
+          style={{ "--depth-x": "0.25", "--depth-y": "0.3" } as CSSProperties}
         >
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -207,7 +190,7 @@ export default function DashboardShowcase() {
                   Login Preview
                 </p>
                 <h3 className="mt-2 font-headline text-2xl font-bold tracking-[-0.04em] text-white">
-                  登录后立刻进入知识工作台
+                  Enter the knowledge workspace right after sign-in
                 </h3>
               </div>
               <div className="hidden rounded-full border border-primary/20 px-3 py-1 font-headline text-[10px] uppercase tracking-[0.24em] text-primary md:block">
@@ -221,7 +204,7 @@ export default function DashboardShowcase() {
                   Workspaces
                 </p>
                 <p className="mt-3 font-headline text-xl font-semibold text-white">
-                  18 个视频项目
+                  18 video projects
                 </p>
               </div>
               <div className="rounded-xl border border-[rgba(88,66,53,0.2)] bg-surface-container-low p-4">
@@ -247,10 +230,10 @@ export default function DashboardShowcase() {
                 ••••••••••••
               </div>
               <Link
-                href="/dashboard"
+                href={loginHref}
                 className="inline-flex w-full items-center justify-center rounded-xl bg-linear-to-br from-primary to-(--primary-strong) px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-(--on-primary) transition-transform hover:scale-[1.02]"
               >
-                登录并进入工作台
+                Sign In To Workspace
               </Link>
             </div>
           </div>

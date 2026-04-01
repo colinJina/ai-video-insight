@@ -12,10 +12,10 @@ const STATUS_STYLES: Record<AnalysisTaskStatus, string> = {
 };
 
 const STATUS_LABELS: Record<AnalysisTaskStatus, string> = {
-  queued: "排队中",
-  processing: "分析中",
-  completed: "已完成",
-  failed: "失败",
+  queued: "Queued",
+  processing: "Processing",
+  completed: "Completed",
+  failed: "Failed",
 };
 
 export default function StatusBadge({ status }: { status: AnalysisTaskStatus }) {

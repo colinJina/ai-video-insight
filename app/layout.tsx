@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+
+import AuthModalProvider from "@/components/auth/AuthModalProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "视频智脑 AI",
-  description: "Amber Synth inspired AI video knowledge dashboard",
+  title: "AI Video Insight",
+  description: "An amber-toned AI workspace for turning video into searchable knowledge.",
 };
 
 export default function RootLayout({
@@ -12,8 +14,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full flex flex-col">
+        <AuthModalProvider>{children}</AuthModalProvider>
+      </body>
     </html>
   );
 }

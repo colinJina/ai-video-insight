@@ -8,7 +8,7 @@ import StatusBadge from "@/components/app/StatusBadge";
 import type { AnalysisPublicTask } from "@/lib/analysis/types";
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -43,14 +43,14 @@ export default function AnalysisCard({
         const payload = (await response.json().catch(() => null)) as
           | { error?: { message?: string } }
           | null;
-        throw new Error(payload?.error?.message ?? "操作失败，请稍后重试。");
+        throw new Error(payload?.error?.message ?? "Action failed. Please try again.");
       }
 
       startTransition(() => {
         router.refresh();
       });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "操作失败，请稍后重试。");
+      setError(nextError instanceof Error ? nextError.message : "Action failed. Please try again.");
     }
   };
 
@@ -59,7 +59,7 @@ export default function AnalysisCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-            分析记录
+            Analysis Record
           </p>
           <h2 className="mt-3 line-clamp-2 font-headline text-xl font-bold tracking-[-0.03em] text-white">
             {task.result?.title ?? task.video.title}
@@ -70,19 +70,19 @@ export default function AnalysisCard({
 
       <div className="mt-5 space-y-3 text-sm leading-7 text-[color:var(--text-muted)]">
         <p className="line-clamp-3">
-          {task.result?.summary ?? task.video.description ?? "摘要尚未生成，系统正在等待分析结果。"}
+          {task.result?.summary ?? task.video.description ?? "The summary is not available yet. The system is still waiting for analysis output."}
         </p>
         <div className="rounded-2xl border border-[color:rgba(88,66,53,0.18)] bg-[color:rgba(23,12,3,0.66)] px-4 py-3 text-xs leading-6 text-[color:rgba(223,192,175,0.72)]">
           <span className="block font-headline uppercase tracking-[0.18em] text-[color:var(--text-muted)]">
-            视频链接
+            Source URL
           </span>
           <span className="mt-1 block break-all">{task.video.originalUrl}</span>
         </div>
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-[color:rgba(223,192,175,0.72)]">
-        <span>创建于 {formatDate(task.createdAt)}</span>
-        {task.archivedAt ? <span>归档于 {formatDate(task.archivedAt)}</span> : null}
+        <span>Created {formatDate(task.createdAt)}</span>
+        {task.archivedAt ? <span>Archived {formatDate(task.archivedAt)}</span> : null}
       </div>
 
       {error ? (
@@ -96,7 +96,7 @@ export default function AnalysisCard({
           className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02]"
           href={`/analysis/${task.id}`}
         >
-          查看详情
+          View Details
         </Link>
         <button
           className="rounded-xl border border-[color:rgba(88,66,53,0.28)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)] disabled:opacity-60"
@@ -106,7 +106,7 @@ export default function AnalysisCard({
           }}
           type="button"
         >
-          {isPending ? "处理中" : archived ? "取消归档" : "归档"}
+          {isPending ? "Working..." : archived ? "Restore" : "Archive"}
         </button>
       </div>
     </article>

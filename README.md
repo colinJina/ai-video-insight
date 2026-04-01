@@ -1,21 +1,24 @@
-# 视频分析 MVP
+# AI Video Insight
 
-这是一个基于 Next.js 16.2.1 App Router 的视频分析 MVP。当前版本已经支持：
+这是一个基于 Next.js 16.2.1 App Router 的视频分析应用。当前版本已经支持：
 
 - 在 `/dashboard` 输入视频链接并创建分析任务
 - 通过 Route Handlers 轮询任务状态
 - 服务端抽取基础视频信息
-- 通过可替换的 transcript provider 获取字幕/转写
+- 通过可替换的 transcript provider 获取字幕或转写
 - 调用可切换的 AI provider 生成结构化摘要
-- 基于同一份视频上下文继续追问
+- 在同一视频上下文里继续追问
+- 使用 Supabase 保存用户分析、通知和设置数据
+- 使用 Supabase Auth 的 Google / GitHub OAuth 登录
 
 ## 技术说明
 
 - 路由全部基于 App Router
 - 公开 API 使用 Route Handlers
 - 核心业务逻辑位于 `lib/analysis/*`
-- 当前仓储为内存实现，便于本地跑通 MVP
-- 默认 transcript provider 和 AI provider 都支持 `mock` 回退
+- 持久化存储使用 Supabase Postgres
+- 认证使用 Supabase Auth OAuth
+- transcript provider 和 AI provider 都支持 `mock` 回退
 
 ## 本地运行
 
@@ -54,23 +57,15 @@ YT_DLP_BIN=yt-dlp
 ANALYSIS_MOCK_DELAY_MS=1200
 ```
 
-也可以直接复制：
-
-```bash
-cp .env.example .env.local
-```
-
-然后只填你自己的 Supabase 与 AI / Transcript 配置。
-
 ## Supabase Setup
 
 当前仓库已经接好了：
 
-- Supabase Auth magic link 登录
-- Supabase Postgres 仓库模式
-- 用户隔离的 analysis / notifications / settings 数据结构
+- Supabase Auth OAuth 登录
+- Supabase Postgres 数据表结构
+- 用户隔离的 analysis / notifications / settings 数据模型
 
-你还需要完成 4 个手动步骤：
+你还需要完成以下步骤。
 
 ### 1. 创建 Supabase 项目
 
@@ -86,7 +81,7 @@ cp .env.example .env.local
 
 打开 Supabase `SQL Editor`，执行：
 
-- [supabase/schema.sql](C:\Users\31744\Desktop\my-app\supabase\schema.sql)
+- [supabase/schema.sql](C:\Users\31744\Desktop\ai-video-insight\supabase\schema.sql)
 
 这会创建：
 
@@ -96,19 +91,22 @@ cp .env.example .env.local
 - 自动更新时间触发器
 - RLS 策略
 
-### 3. 打开邮箱登录
+### 3. 打开 OAuth 登录
 
 在 Supabase 控制台中确认：
 
-1. `Authentication -> Providers -> Email` 已开启
-2. `Authentication -> URL Configuration -> Site URL`
-   本地建议填：`http://localhost:3000`
-3. `Authentication -> URL Configuration -> Redirect URLs`
+1. `Authentication -> Providers -> Google` 已开启
+2. `Authentication -> Providers -> GitHub` 已开启
+3. `Authentication -> URL Configuration -> Site URL`
+   本地建议填写：`http://localhost:3000`
+4. `Authentication -> URL Configuration -> Redirect URLs`
    至少加入：`http://localhost:3000/auth/callback`
 
-如果你之后部署到 Vercel，也要加入正式域名的：
+如果之后部署到 Vercel，也要加入正式域名的回调地址：
 
 - `https://你的域名/auth/callback`
+
+同时你还需要在 Google Developer Console 和 GitHub OAuth App 中，把回调地址也配置为同一个 `/auth/callback`。
 
 ### 4. 本地验证
 
@@ -120,25 +118,26 @@ npm run dev
 
 - [http://localhost:3000/login](http://localhost:3000/login)
 
-输入邮箱后：
+点击 Google 或 GitHub 登录后：
 
-1. 收到 magic link
-2. 点击后回到 `/auth/callback`
+1. 页面跳转到对应的 OAuth provider
+2. 授权完成后回到 `/auth/callback`
 3. 项目自动交换 Supabase session
 4. 跳回资料库或你原本要访问的受保护页面
+5. 后续请求通过 cookie + refresh token 保持登录状态，直到用户登出或 session 失效
 
-## 当前 Supabase 对接范围
+## 当前 Supabase 接入范围
 
-目前代码已经能识别并使用 Supabase 的部分：
+目前代码已经使用 Supabase 的部分包括：
 
-- [lib/supabase/client.ts](C:\Users\31744\Desktop\my-app\lib\supabase\client.ts)
-- [lib/supabase/server.ts](C:\Users\31744\Desktop\my-app\lib\supabase\server.ts)
-- [lib/supabase/admin.ts](C:\Users\31744\Desktop\my-app\lib\supabase\admin.ts)
-- [app/auth/callback/route.ts](C:\Users\31744\Desktop\my-app\app\auth\callback\route.ts)
-- [lib/auth/session.ts](C:\Users\31744\Desktop\my-app\lib\auth\session.ts)
-- [lib/analysis/repository.ts](C:\Users\31744\Desktop\my-app\lib\analysis\repository.ts)
-- [lib/notifications/repository.ts](C:\Users\31744\Desktop\my-app\lib\notifications\repository.ts)
-- [lib/settings/repository.ts](C:\Users\31744\Desktop\my-app\lib\settings\repository.ts)
+- [lib/supabase/client.ts](C:\Users\31744\Desktop\ai-video-insight\lib\supabase\client.ts)
+- [lib/supabase/server.ts](C:\Users\31744\Desktop\ai-video-insight\lib\supabase\server.ts)
+- [lib/supabase/admin.ts](C:\Users\31744\Desktop\ai-video-insight\lib\supabase\admin.ts)
+- [app/auth/callback/route.ts](C:\Users\31744\Desktop\ai-video-insight\app\auth\callback\route.ts)
+- [lib/auth/session.ts](C:\Users\31744\Desktop\ai-video-insight\lib\auth\session.ts)
+- [lib/analysis/repository.ts](C:\Users\31744\Desktop\ai-video-insight\lib\analysis\repository.ts)
+- [lib/notifications/repository.ts](C:\Users\31744\Desktop\ai-video-insight\lib\notifications\repository.ts)
+- [lib/settings/repository.ts](C:\Users\31744\Desktop\ai-video-insight\lib\settings\repository.ts)
 
 ## Deploying To Vercel
 
@@ -171,55 +170,14 @@ Notes:
 - Some videos may still require cookies, login, region access, or may block automated downloads.
 - The current implementation is suitable for low to moderate traffic. For heavier workloads, move media extraction into a dedicated worker or container service.
 
-### 变量说明
-
-- `AI_PROVIDER`
-  - 可选值：`mock`、`http`
-  - 未显式配置时，如果 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 都存在，则自动使用 `http`，否则回退到 `mock`
-- `AI_BASE_URL`
-  - 当前 `http` provider 采用 OpenAI-compatible Chat Completions 协议
-  - 可以传基础地址，例如 `https://api.openai.com/v1`
-  - 也可以直接传完整地址，例如 `https://api.openai.com/v1/chat/completions`
-- `AI_API_KEY`
-  - 服务端访问第三方 AI API 的密钥，只会在服务端读取
-- `AI_MODEL`
-  - 第三方 AI 模型名
-- `AI_TIMEOUT_MS`
-  - AI 请求超时时间，默认 `25000`
-- `TRANSCRIPT_TIMEOUT_MS`
-  - 转写阶段基础超时时间，默认 `120000`
-  - AssemblyAI 会在这个基础上，按视频时长自动放宽等待时间，最长放宽到 `15` 分钟
-- `TRANSCRIPT_POLL_INTERVAL_MS`
-  - 转写轮询间隔，默认 `3000`
-- `TRANSCRIPT_PROVIDER`
-- `ANALYSIS_MOCK_DELAY_MS`
-  - 可选。用于本地演示时延长 mock transcript 的处理时间，方便看到 `processing` 状态
-
 ## API
 
 - `POST /api/analyze`
-  - 请求体：`{ "videoUrl": "https://..." }`
-  - 返回：分析任务对象
+  请求体：`{ "videoUrl": "https://..." }`
 - `GET /api/analysis/[id]`
-  - 返回：任务当前状态、视频信息、分析结果、聊天消息
+  返回任务当前状态、视频信息、分析结果和聊天消息
 - `POST /api/analysis/[id]/chat`
-  - 请求体：`{ "message": "..." }`
-  - 返回：更新后的任务对象
-
-## 当前实现细节
-
-- AI 输出被要求返回严格 JSON：
-
-```json
-{
-  "title": "string",
-  "summary": "string",
-  "outline": [{ "time": "MM:SS", "text": "string" }],
-  "keyPoints": ["string"],
-  "suggestedQuestions": ["string"]
-}
-```
-
+  请求体：`{ "message": "..." }`
 
 ## 目录概览
 

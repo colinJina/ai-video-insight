@@ -25,9 +25,9 @@ type AiPanelProps = {
 };
 
 const tabs: TabOption[] = [
-  { id: "summary", label: "摘要" },
-  { id: "outline", label: "大纲" },
-  { id: "chat", label: "AI 对话" },
+  { id: "summary", label: "Summary" },
+  { id: "outline", label: "Outline" },
+  { id: "chat", label: "AI Chat" },
 ];
 
 function parseTimestamp(value: string | null) {
@@ -90,7 +90,7 @@ function SummaryPanel({ analysis }: { analysis: AnalysisPublicTask }) {
       </p>
 
       <div className="mt-8">
-        <SectionTitle>关键要点</SectionTitle>
+        <SectionTitle>Key Takeaways</SectionTitle>
         <div className="space-y-3">
           {analysis.result.keyPoints.map((point) => (
             <div
@@ -121,11 +121,12 @@ function OutlinePanel({
 
   return (
     <section>
-      <SectionTitle>关键时间点</SectionTitle>
+      <SectionTitle>Key Moments</SectionTitle>
 
       {!canSeekByTime || analysis.transcriptSource === "mock" ? (
         <div className="mb-5 rounded-2xl border border-[color:rgba(255,127,0,0.18)] bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-[color:var(--text-muted)]">
-          当前结果没有稳定的真实时间轴，这里的条目只作为内容摘要，不建议把它当成精确跳转点。
+          This result does not contain a stable real timeline yet. Treat the entries below as
+          content notes rather than precise seek points.
         </div>
       ) : null}
 
@@ -137,9 +138,7 @@ function OutlinePanel({
           return (
             <div
               key={`${item.time ?? "no-time"}-${item.text}`}
-              className={`group flex gap-4 ${
-                isClickable ? "cursor-pointer" : "cursor-default"
-              }`}
+              className={`group flex gap-4 ${isClickable ? "cursor-pointer" : "cursor-default"}`}
               onClick={() => {
                 if (typeof timeInSeconds === "number") {
                   onOutlineClick(timeInSeconds);
@@ -158,7 +157,7 @@ function OutlinePanel({
               tabIndex={isClickable ? 0 : undefined}
             >
               <span className="pt-1 font-headline text-xs text-[color:var(--primary-strong)]">
-                {item.time ?? "无时间"}
+                {item.time ?? "No time"}
               </span>
               <div className="flex-1 border-l border-[color:rgba(88,66,53,0.2)] py-1 pl-4 text-sm leading-6 text-foreground transition-all group-hover:border-[color:var(--primary-strong)] group-hover:bg-[color:rgba(255,127,0,0.05)]">
                 {item.text}
@@ -204,14 +203,14 @@ function ChatPanel({
       await onSendMessage(nextMessage);
       setDraft("");
     } catch {
-      // The parent component exposes the friendly error copy.
+      // Parent exposes the user-facing error copy.
     }
   };
 
   return (
     <div className="space-y-10">
       <section>
-        <SectionTitle>对话上下文</SectionTitle>
+        <SectionTitle>Conversation Context</SectionTitle>
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -230,7 +229,7 @@ function ChatPanel({
 
       {suggestedQuestions.length > 0 ? (
         <section>
-          <SectionTitle>建议追问</SectionTitle>
+          <SectionTitle>Suggested Follow-Ups</SectionTitle>
           <div className="flex flex-wrap gap-3">
             {suggestedQuestions.map((question) => (
               <button
@@ -266,7 +265,7 @@ function ChatPanel({
           className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 pr-12 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(88,66,53,1)] focus:border-[color:var(--primary-strong)]"
           disabled={isChatPending}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="继续追问这段视频的内容"
+          placeholder="Ask a follow-up about this video"
           type="text"
           value={draft}
         />
@@ -298,8 +297,8 @@ export default function AiPanel({
     if (viewStatus === "idle") {
       return (
         <EmptyState
-          description="任务创建后，这里会展示 AI 自动生成的摘要、关键要点和建议追问。"
-          title="等待分析任务"
+          description="After the task starts, this panel will fill with an AI summary, key takeaways, and suggested follow-up questions."
+          title="Waiting For Analysis"
         />
       );
     }
@@ -307,8 +306,8 @@ export default function AiPanel({
     if (viewStatus === "submitting" || viewStatus === "processing") {
       return (
         <EmptyState
-          description="服务端正在准备转写和结构化结果，通常几秒后就会返回。"
-          title="正在生成摘要"
+          description="The server is preparing transcript context and structured output. Results usually arrive a few seconds after the task is queued."
+          title="Generating Summary"
         />
       );
     }
@@ -316,8 +315,8 @@ export default function AiPanel({
     if (viewStatus === "error") {
       return (
         <EmptyState
-          description={analysis?.errorMessage ?? "本次分析未能成功完成，请调整链接后重试。"}
-          title="分析失败"
+          description={analysis?.errorMessage ?? "This analysis did not complete successfully. Adjust the video link and try again."}
+          title="Analysis Failed"
         />
       );
     }
@@ -329,26 +328,21 @@ export default function AiPanel({
     if (!analysis || viewStatus !== "success" || !analysis.result) {
       return (
         <EmptyState
-          description="分析完成后，这里会展示可点击的时间大纲；如果当前来源没有真实时间轴，也会明确标记。"
-          title="暂无时间大纲"
+          description="Once the analysis finishes, this tab shows a clickable outline. If the current source has no stable real timestamps, we label that explicitly."
+          title="No Outline Yet"
         />
       );
     }
 
-    return (
-      <OutlinePanel
-        analysis={analysis}
-        onOutlineClick={(time) => onOutlineClick?.(time)}
-      />
-    );
+    return <OutlinePanel analysis={analysis} onOutlineClick={(time) => onOutlineClick?.(time)} />;
   };
 
   const renderChat = () => {
     if (!analysis || viewStatus !== "success" || !analysis.result) {
       return (
         <EmptyState
-          description="请先完成视频分析，随后你就可以基于 transcript 和摘要继续提问。"
-          title="AI 对话尚未就绪"
+          description="Complete the video analysis first, then continue asking questions against the transcript and summary context."
+          title="AI Chat Not Ready"
         />
       );
     }

@@ -6,21 +6,22 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 import type { AppUser } from "@/lib/app/types";
+import { buildAuthModalHref } from "@/lib/auth/modal";
 import { sanitizeRedirectPath } from "@/lib/auth/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
 const desktopLinks = [
-  { href: "/dashboard", label: "分析台" },
-  { href: "/library", label: "资料库" },
-  { href: "/archive", label: "归档" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/library", label: "Library" },
+  { href: "/archive", label: "Archive" },
 ];
 
 const mobileLinks = [
-  { href: "/dashboard", icon: "space_dashboard", label: "分析" },
-  { href: "/library", icon: "video_library", label: "资料库" },
-  { href: "/notifications", icon: "notifications", label: "通知" },
-  { href: "/settings", icon: "settings", label: "设置" },
+  { href: "/dashboard", icon: "space_dashboard", label: "Dashboard" },
+  { href: "/library", icon: "video_library", label: "Library" },
+  { href: "/notifications", icon: "notifications", label: "Inbox" },
+  { href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 const FALLBACK_AVATAR =
@@ -28,10 +29,6 @@ const FALLBACK_AVATAR =
 
 function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function buildLoginHref(targetPath: string) {
-  return `/login?next=${encodeURIComponent(sanitizeRedirectPath(targetPath))}`;
 }
 
 function NotificationIcon({ className }: { className?: string }) {
@@ -109,9 +106,16 @@ export default function Navbar({
     () =>
       currentUser?.nickname?.trim() ||
       currentUser?.email?.split("@")[0] ||
-      "访客",
+      "Guest",
     [currentUser],
   );
+  const currentHref = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
+
+  const buildLoginHref = (targetPath: string) =>
+    buildAuthModalHref(currentHref, sanitizeRedirectPath(targetPath));
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -140,7 +144,7 @@ export default function Navbar({
     }
 
     await Promise.allSettled(logoutTasks);
-    router.push("/login");
+    router.push("/dashboard");
     router.refresh();
   };
 
@@ -153,7 +157,7 @@ export default function Navbar({
               className="text-lg font-bold italic tracking-tight text-primary transition-opacity hover:opacity-90 sm:text-xl"
               href="/"
             >
-              视频智脑 AI
+              AI Video Insight
             </Link>
 
             <div className="hidden items-center gap-6 text-sm md:flex">
@@ -194,14 +198,14 @@ export default function Navbar({
                 defaultValue={searchParams.get("query") ?? ""}
                 key={`${pathname}:${searchParams.get("query") ?? ""}`}
                 name="query"
-                placeholder="搜索标题、摘要或视频链接..."
+                placeholder="Search titles, summaries, or source links..."
                 type="text"
               />
               <button
                 className="ml-2 border border-[color:rgba(88,66,53,0.5)] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.2em] text-primary/50 transition-colors hover:border-primary/50 hover:text-primary"
                 type="submit"
               >
-                搜索
+                Search
               </button>
             </form>
           </div>
@@ -233,7 +237,7 @@ export default function Navbar({
               <div className="flex items-center gap-3">
                 <div className="hidden text-right sm:block">
                   <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--text-muted)]">
-                    已登录
+                    Signed In
                   </p>
                   <p className="text-sm text-white">{userLabel}</p>
                 </div>
@@ -253,7 +257,7 @@ export default function Navbar({
                   }}
                   type="button"
                 >
-                  退出
+                  Sign Out
                 </button>
               </div>
             ) : (
@@ -261,7 +265,7 @@ export default function Navbar({
                 className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.03]"
                 href={buildLoginHref(pathname)}
               >
-                登录
+                Sign In
               </Link>
             )}
           </div>

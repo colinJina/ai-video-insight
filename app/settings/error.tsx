@@ -19,18 +19,18 @@ export default function SettingsError({
             className="inline-flex rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-2.5 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)]"
             href="/settings"
           >
-            返回设置
+            Back To Settings
           </Link>
         </div>
         <PageHeader
-          description="设置数据加载失败。你可以立即重试。"
+          description="Settings data failed to load. You can retry immediately."
           eyebrow="Settings"
-          title="设置暂时不可用"
+          title="Settings temporarily unavailable"
         />
         <PageErrorState
-          description="如果问题持续存在，请检查设置接口和当前账号数据。"
+          description="If the issue continues, inspect the settings API and the current account data."
           onRetry={reset}
-          title="这次没有成功取回设置"
+          title="We could not load your settings"
         />
       </div>
     </main>

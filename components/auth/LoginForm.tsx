@@ -6,6 +6,23 @@ import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
+const OAUTH_PROVIDERS = [
+  {
+    id: "google",
+    label: "Continue with Google",
+    icon: "G",
+    iconClassName: "bg-[linear-gradient(135deg,#4285F4,#EA4335_45%,#FBBC05_70%,#34A853)] text-white",
+  },
+  {
+    id: "github",
+    label: "Continue with GitHub",
+    icon: "GH",
+    iconClassName: "bg-[#2f1b0e] text-[#f7edd8]",
+  },
+] as const;
+
+type OAuthProvider = (typeof OAUTH_PROVIDERS)[number]["id"];
+
 export default function LoginForm({
   redirectToPath = "/library",
 }: {
@@ -16,6 +33,9 @@ export default function LoginForm({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<OAuthProvider | "demo" | null>(
+    null,
+  );
 
   const submitDemoLogin = async () => {
     const response = await fetch("/api/auth/demo-login", {
@@ -23,132 +43,158 @@ export default function LoginForm({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({
+        email: email.trim() || "demo@example.com",
+      }),
     });
 
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as
         | { error?: { message?: string } }
         | null;
-      throw new Error(payload?.error?.message ?? "登录失败，请稍后重试。");
+      throw new Error(payload?.error?.message ?? "Sign-in failed. Please try again.");
     }
 
     router.replace(redirectToPath);
     router.refresh();
   };
 
-  const submitSupabaseLogin = async () => {
+  const submitSupabaseLogin = async (provider: OAuthProvider) => {
     const supabase = createSupabaseBrowserClient();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectToPath)}`;
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email,
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider,
       options: {
-        emailRedirectTo: redirectTo,
+        redirectTo,
       },
     });
 
     if (signInError) {
       throw signInError;
     }
-
-    setMessage("登录链接已发送到你的邮箱，请在新标签页完成确认。");
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleOAuthLogin = async (provider: OAuthProvider) => {
     setError(null);
     setMessage(null);
     setIsSubmitting(true);
+    setActiveProvider(provider);
 
     try {
-      if (isSupabaseAuthConfigured()) {
-        await submitSupabaseLogin();
-      } else {
-        await submitDemoLogin();
-      }
+      await submitSupabaseLogin(provider);
+      setMessage("Redirecting to the provider. Finish the authorization flow to return here.");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "登录失败，请稍后重试。");
-    } finally {
+      setError(
+        nextError instanceof Error ? nextError.message : "Sign-in failed. Please try again.",
+      );
       setIsSubmitting(false);
+      setActiveProvider(null);
     }
   };
 
+  const handleEmailSubmit = async () => {
+    setError(null);
+    setMessage(null);
+    setIsSubmitting(true);
+    setActiveProvider("demo");
+
+    try {
+      await submitDemoLogin();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "Sign-in failed. Please try again.",
+      );
+      setIsSubmitting(false);
+      setActiveProvider(null);
+    }
+  };
+
+  const authConfigured = isSupabaseAuthConfigured();
+
   return (
-    <form className="glass-card rounded-[1.75rem] p-6 sm:p-8" onSubmit={handleSubmit}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.28em] text-[color:var(--primary-strong)]">
-            Access
-          </p>
-          <h2 className="mt-3 font-headline text-2xl font-bold tracking-[-0.04em] text-white">
-            用邮箱进入你的知识空间
-          </h2>
-        </div>
-        <div className="rounded-full border border-[color:rgba(255,127,0,0.22)] bg-[color:rgba(255,127,0,0.08)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
-          {isSupabaseAuthConfigured() ? "Supabase" : "Demo"}
-        </div>
+    <div className="mx-auto w-full max-w-[420px]">
+      <div className="space-y-3">
+        {authConfigured ? (
+          OAUTH_PROVIDERS.map((provider) => {
+            const isActive = activeProvider === provider.id;
+
+            return (
+              <button
+                key={provider.id}
+                className={`flex w-full items-center gap-4 rounded-none border px-5 py-4 text-left transition-all ${
+                  provider.id === "google"
+                    ? "border-[rgba(63,40,24,0.82)] bg-[#5e4c3f] text-[#fff8ee] hover:bg-[#534437]"
+                    : "border-[rgba(63,40,24,0.36)] bg-[rgba(255,252,246,0.86)] text-[#2f1b0e] hover:bg-[rgba(250,244,232,0.96)]"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+                disabled={isSubmitting}
+                onClick={() => void handleOAuthLogin(provider.id)}
+                type="button"
+              >
+                <span
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${provider.iconClassName}`}
+                >
+                  {provider.icon}
+                </span>
+                <span className="font-body text-[15px] font-medium tracking-[-0.01em]">
+                  {isActive ? "Opening provider..." : provider.label}
+                </span>
+              </button>
+            );
+          })
+        ) : null}
       </div>
 
-      <div className="mt-6 rounded-[1.25rem] border border-[color:rgba(88,66,53,0.18)] bg-[color:rgba(23,12,3,0.55)] p-4">
-        <label className="space-y-3">
-          <span className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-            邮箱地址
-          </span>
+      <div className="my-6 flex items-center gap-4">
+        <div className="h-px flex-1 bg-[rgba(120,77,42,0.22)]" />
+        <span className="text-sm text-[rgba(66,40,24,0.62)]">
+          {authConfigured ? "or use demo email" : "use email"}
+        </span>
+        <div className="h-px flex-1 bg-[rgba(120,77,42,0.22)]" />
+      </div>
+
+      <div className="space-y-4">
+        <label className="block">
+          <span className="sr-only">Email address</span>
           <input
-            className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(18,9,2,0.78)] px-4 py-3 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(223,192,175,0.42)] focus:border-[color:var(--primary-strong)]"
+            className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.92)] px-4 py-4 text-[15px] text-[#2f1b0e] outline-none transition-colors placeholder:text-[rgba(120,77,42,0.58)] focus:border-[rgba(191,114,31,0.7)]"
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="name@example.com"
+            placeholder={authConfigured ? "Email is used for demo sign-in only" : "your@email.com"}
             type="email"
             value={email}
           />
         </label>
 
-        <p className="mt-4 text-sm leading-7 text-[color:var(--text-muted)]">
-          {isSupabaseAuthConfigured()
-            ? "已接入 Supabase Auth。提交后会向你的邮箱发送 magic link。"
-            : "当前未配置 Supabase 环境变量，开发模式会退化为本地演示登录。"}
-        </p>
+        <button
+          className="w-full rounded-none bg-[linear-gradient(180deg,#c37723_0%,#b56716_100%)] px-5 py-4 font-headline text-sm font-bold uppercase tracking-[0.18em] text-[#fff8ee] shadow-[0_8px_20px_rgba(126,72,14,0.22)] transition-transform hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isSubmitting || (!email.trim() && !authConfigured)}
+          onClick={() => void handleEmailSubmit()}
+          type="button"
+        >
+          {activeProvider === "demo" ? "Signing In..." : "Send Verification Code"}
+        </button>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.42)] px-4 py-4">
-          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-white">
-            登录后解锁
-          </p>
-          <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
-            资料库、归档、通知和设置会进入你的专属空间。
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.42)] px-4 py-4">
-          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-white">
-            当前方式
-          </p>
-          <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
-            {isSupabaseAuthConfigured()
-              ? "发送邮箱登录链接，点击确认后自动回到你刚才要访问的页面。"
-              : "使用输入邮箱创建本地演示会话，方便继续联调界面。"}
-          </p>
-        </div>
-      </div>
+      <p className="mt-5 text-center text-sm leading-7 text-[rgba(66,40,24,0.66)]">
+        By continuing you agree to our Terms & Privacy.
+      </p>
+
+      {authConfigured ? (
+        <p className="mt-3 text-center text-xs leading-6 text-[rgba(66,40,24,0.56)]">
+          Google and GitHub keep using the existing Supabase session flow. The email field above
+          remains a local demo fallback for development.
+        </p>
+      ) : null}
 
       {message ? (
-        <p className="mt-5 rounded-xl border border-[color:rgba(109,202,144,0.24)] bg-[color:rgba(80,160,110,0.12)] px-4 py-3 text-sm text-[color:#9ee6b7]">
+        <p className="mt-4 border border-[rgba(109,202,144,0.32)] bg-[rgba(80,160,110,0.12)] px-4 py-3 text-sm text-[#2d6c41]">
           {message}
         </p>
       ) : null}
       {error ? (
-        <p className="mt-5 rounded-xl border border-[color:rgba(255,120,120,0.24)] bg-[color:rgba(120,20,20,0.16)] px-4 py-3 text-sm text-[color:#ffb7b7]">
+        <p className="mt-4 border border-[rgba(186,66,66,0.22)] bg-[rgba(166,48,48,0.1)] px-4 py-3 text-sm text-[#8f2f2f]">
           {error}
         </p>
       ) : null}
-
-      <button
-        className="mt-6 w-full rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02] disabled:opacity-60"
-        disabled={isSubmitting || !email.trim()}
-        type="submit"
-      >
-        {isSubmitting ? "提交中" : "发送登录链接"}
-      </button>
-    </form>
+    </div>
   );
 }

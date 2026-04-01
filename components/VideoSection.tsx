@@ -9,28 +9,28 @@ const STATUS_META: Record<
   { badge: string; button: string; tone: string }
 > = {
   idle: {
-    badge: "待分析",
-    button: "开始分析",
+    badge: "Ready",
+    button: "Start Analysis",
     tone: "text-(--text-muted)",
   },
   submitting: {
-    badge: "提交中",
-    button: "创建任务中…",
+    badge: "Submitting",
+    button: "Creating Task",
     tone: "text-primary",
   },
   processing: {
-    badge: "分析中",
-    button: "分析中…",
+    badge: "Processing",
+    button: "Processing",
     tone: "text-primary",
   },
   success: {
-    badge: "已完成",
-    button: "重新分析",
+    badge: "Completed",
+    button: "Run Again",
     tone: "text-(--primary-strong)",
   },
   error: {
-    badge: "失败",
-    button: "重试分析",
+    badge: "Failed",
+    button: "Retry Analysis",
     tone: "text-[#ff8b8b]",
   },
 };
@@ -42,6 +42,7 @@ type VideoMetric = {
 
 type VideoSectionProps = {
   description: string;
+  isAuthenticated: boolean;
   metrics: VideoMetric[];
   onAnalyze: () => void | Promise<void>;
   onVideoUrlChange: (value: string) => void;
@@ -54,6 +55,7 @@ type VideoSectionProps = {
 
 const VideoSection = ({
   description,
+  isAuthenticated,
   metrics,
   onAnalyze,
   onVideoUrlChange,
@@ -88,7 +90,7 @@ const VideoSection = ({
             <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
               <div className="max-w-2xl space-y-3">
                 <span className="inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 font-headline text-[10px] uppercase tracking-[0.24em] text-white/75 backdrop-blur-md">
-                  已解析到封面
+                  Poster Ready
                 </span>
                 <h2 className="text-glow font-headline text-2xl font-bold tracking-[-0.03em] text-white sm:text-4xl">
                   {title}
@@ -106,10 +108,11 @@ const VideoSection = ({
                 image_not_supported
               </span>
               <p className="font-headline text-xs font-bold uppercase tracking-[0.24em] text-(--primary-strong)">
-                未解析到封面
+                No Poster Yet
               </p>
               <p className="mt-3 text-sm leading-7 text-(--text-muted)">
-                当前结果没有可展示的封面图，系统仍然可以继续分析，但这里不会显示图片。
+                We can still analyze the video even when poster artwork is missing. This panel will
+                update as soon as artwork becomes available.
               </p>
             </div>
           </div>
@@ -121,13 +124,18 @@ const VideoSection = ({
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="block font-headline text-[10px] font-bold uppercase tracking-[0.3em] text-(--primary-strong)">
-                视频理解工作台
+                Video Analysis Console
               </span>
               <span
                 className={`rounded-full border border-[rgba(88,66,53,0.25)] bg-[rgba(29,17,6,0.55)] px-3 py-1 font-headline text-[10px] uppercase tracking-[0.24em] ${statusMeta.tone}`}
               >
                 {statusMeta.badge}
               </span>
+              {!isAuthenticated ? (
+                <span className="rounded-full border border-[rgba(255,127,0,0.2)] bg-[rgba(255,127,0,0.08)] px-3 py-1 font-headline text-[10px] uppercase tracking-[0.24em] text-primary">
+                  Sign-in Required
+                </span>
+              ) : null}
             </div>
             <h1 className="text-glow max-w-4xl font-headline text-4xl font-bold tracking-[-0.04em] text-white sm:text-5xl">
               {title}
@@ -143,7 +151,7 @@ const VideoSection = ({
             className="font-headline text-[10px] font-bold uppercase tracking-[0.24em] text-(--primary-strong)"
             htmlFor="dashboard-video-url"
           >
-            视频链接
+            Video URL
           </label>
 
           <div className="mt-3 flex flex-col gap-3 lg:flex-row">
@@ -160,7 +168,7 @@ const VideoSection = ({
               disabled={isBusy}
               type="submit"
             >
-              {statusMeta.button}
+              {isAuthenticated ? statusMeta.button : "Sign In To Analyze"}
             </button>
           </div>
 

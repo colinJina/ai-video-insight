@@ -6,9 +6,9 @@ export default function NotificationsLoading() {
   return (
     <AppShell compact>
       <PageHeader
-        description="正在加载通知中心，请稍候。"
+        description="Loading your notification center."
         eyebrow="Notifications"
-        title="通知中心"
+        title="Notification Center"
       />
       <AnalysisGridSkeleton count={3} />
     </AppShell>

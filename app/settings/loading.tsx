@@ -6,9 +6,9 @@ export default function SettingsLoading() {
   return (
     <AppShell compact>
       <PageHeader
-        description="正在读取个人设置，请稍候。"
+        description="Loading your personal settings."
         eyebrow="Settings"
-        title="个人设置"
+        title="Personal Settings"
       />
       <AnalysisGridSkeleton count={2} />
     </AppShell>

@@ -6,7 +6,7 @@ import { getAnalysisTask, getAnalysisTaskForUser } from "@/lib/analysis/service"
 import { getOptionalAppSession } from "@/lib/auth/session";
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -34,7 +34,7 @@ export default async function AnalysisDetailPage({
             {analysis.result?.title ?? analysis.video.title}
           </h1>
           <p className="mt-4 text-sm leading-7 text-[color:var(--text-muted)]">
-            创建于 {formatDate(analysis.createdAt)}，最近更新于 {formatDate(analysis.updatedAt)}。
+            Created {formatDate(analysis.createdAt)}, last updated {formatDate(analysis.updatedAt)}.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -44,7 +44,7 @@ export default async function AnalysisDetailPage({
               className="rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-2.5 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)]"
               href="/library"
             >
-              返回资料库
+              Back To Library
             </Link>
           ) : null}
         </div>
@@ -55,7 +55,7 @@ export default async function AnalysisDetailPage({
           <div className="space-y-4">
             <div>
               <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-                视频链接
+                Source URL
               </p>
               <a
                 className="mt-3 block break-all text-sm leading-7 text-[color:var(--text-muted)] hover:text-primary"
@@ -69,12 +69,12 @@ export default async function AnalysisDetailPage({
 
             <div>
               <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-                摘要
+                Summary
               </p>
               <p className="mt-3 text-sm leading-8 text-[color:var(--text-muted)]">
                 {analysis.result?.summary ??
                   analysis.errorMessage ??
-                  "摘要还未生成，请稍后刷新页面查看最新状态。"}
+                  "The summary has not been generated yet. Refresh in a moment to check the latest status."}
               </p>
             </div>
           </div>
@@ -82,29 +82,29 @@ export default async function AnalysisDetailPage({
 
         <section className="glass-card rounded-[1.5rem] p-6 sm:p-8">
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-            关键状态
+            Key Status
           </p>
           <dl className="mt-5 space-y-4 text-sm leading-7 text-[color:var(--text-muted)]">
             <div className="flex justify-between gap-4">
-              <dt>标题</dt>
+              <dt>Title</dt>
               <dd className="text-right text-white">
                 {analysis.result?.title ?? analysis.video.title}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt>视频来源</dt>
+              <dt>Video Source</dt>
               <dd className="text-right text-white">{analysis.video.host}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt>转写来源</dt>
+              <dt>Transcript Source</dt>
               <dd className="text-right text-white">
-                {analysis.transcriptSource ?? "尚未生成"}
+                {analysis.transcriptSource ?? "Not generated yet"}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt>归档状态</dt>
+              <dt>Archive State</dt>
               <dd className="text-right text-white">
-                {analysis.archivedAt ? "已归档" : "资料库中"}
+                {analysis.archivedAt ? "Archived" : "Active Library"}
               </dd>
             </div>
           </dl>
@@ -114,7 +114,7 @@ export default async function AnalysisDetailPage({
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="glass-card rounded-[1.5rem] p-6 sm:p-8">
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-            时间线大纲
+            Timeline Outline
           </p>
           <div className="mt-5 space-y-4">
             {analysis.result?.outline?.length ? (
@@ -124,7 +124,7 @@ export default async function AnalysisDetailPage({
                   className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
                 >
                   <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
-                    {item.time ?? "无时间点"}
+                    {item.time ?? "No timestamp"}
                   </p>
                   <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
                     {item.text}
@@ -133,7 +133,7 @@ export default async function AnalysisDetailPage({
               ))
             ) : (
               <p className="text-sm leading-7 text-[color:var(--text-muted)]">
-                暂无可展示的大纲。
+                No outline is available yet.
               </p>
             )}
           </div>
@@ -141,7 +141,7 @@ export default async function AnalysisDetailPage({
 
         <section className="glass-card rounded-[1.5rem] p-6 sm:p-8">
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-            对话记录
+            Conversation History
           </p>
           <div className="mt-5 space-y-4">
             {analysis.chatMessages.length > 0 ? (
@@ -159,7 +159,7 @@ export default async function AnalysisDetailPage({
               ))
             ) : (
               <p className="text-sm leading-7 text-[color:var(--text-muted)]">
-                这条记录还没有对话历史。
+                This record does not have any conversation history yet.
               </p>
             )}
           </div>

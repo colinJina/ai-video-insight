@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import AiPanel from "@/components/AiPanel";
+import { useAuthModal } from "@/components/auth/AuthModalProvider";
 import VideoSection from "@/components/VideoSection";
 import type {
   AnalysisPublicTask,
@@ -37,7 +38,7 @@ function mapTaskStatusToView(status: AnalysisTaskStatus): AnalysisViewStatus {
 
 function formatDurationLabel(durationSeconds: number | null | undefined) {
   if (typeof durationSeconds !== "number" || !Number.isFinite(durationSeconds)) {
-    return "时长暂不可用";
+    return "Duration unavailable";
   }
 
   const totalSeconds = Math.max(0, Math.round(durationSeconds));
@@ -46,51 +47,59 @@ function formatDurationLabel(durationSeconds: number | null | undefined) {
   const seconds = totalSeconds % 60;
 
   if (hours > 0) {
-    return `时长：${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `Duration ${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
-  return `时长：${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `Duration ${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function buildStatusMessage(
   viewStatus: AnalysisViewStatus,
   analysis: AnalysisPublicTask | null,
   errorMessage: string | null,
+  isAuthenticated: boolean,
 ) {
+  if (!isAuthenticated && viewStatus === "idle") {
+    return "Paste a video URL, then sign in from the modal before we create the analysis task.";
+  }
+
   if (viewStatus === "submitting") {
-    return "正在创建分析任务，请稍候。";
+    return "Creating your analysis task now. This keeps the dashboard state warm while the job is queued.";
   }
 
   if (viewStatus === "processing") {
-    return "服务端正在校验链接、提取视频信息、准备转写并生成结构化摘要。";
+    return "The server is validating the link, extracting metadata, preparing a transcript, and generating a structured summary.";
   }
 
   if (viewStatus === "success" && analysis?.result) {
     const usableTimeline = analysis.result.outline.filter((item) => item.time).length;
 
     if (analysis.transcriptSource === "mock") {
-      return "分析已完成，但当前仍在使用 mock transcript，所以摘要并不是基于这条视频的真实转写内容。";
+      return "The task finished with a mock transcript source, so the summary is useful for UI review but not grounded in the real video transcript.";
     }
 
     return usableTimeline > 0
-      ? `分析完成，已生成 ${usableTimeline} 个可定位时间点和 ${analysis.result.keyPoints.length} 条关键要点。`
-      : `分析完成，已生成 ${analysis.result.keyPoints.length} 条关键要点；当前来源没有稳定的真实时间轴。`;
+      ? `Analysis completed with ${usableTimeline} timestamped outline points and ${analysis.result.keyPoints.length} key takeaways.`
+      : `Analysis completed with ${analysis.result.keyPoints.length} key takeaways, but the current source did not return a stable timeline.`;
   }
 
   if (viewStatus === "error") {
-    return errorMessage ?? "分析失败，请检查链接后重试。";
+    return errorMessage ?? "Analysis failed. Check the video link and try again.";
   }
 
-  return "输入公开可访问的视频链接后，点击“开始分析”即可创建服务端任务。";
+  return "Enter a public video URL and start the workflow to extract metadata, transcript context, and a structured summary.";
 }
 
-function buildVideoMetrics(analysis: AnalysisPublicTask | null, posterUrl: string | null) {
+function buildVideoMetrics(
+  analysis: AnalysisPublicTask | null,
+  posterUrl: string | null,
+) {
   return [
     {
       icon: "link",
       label: analysis?.video.host
-        ? `来源：${analysis.video.host}`
-        : "支持 HTTP / HTTPS 视频链接",
+        ? `Source ${analysis.video.host}`
+        : "Supports HTTP and HTTPS video links",
     },
     {
       icon: "schedule",
@@ -98,17 +107,17 @@ function buildVideoMetrics(analysis: AnalysisPublicTask | null, posterUrl: strin
     },
     {
       icon: "image",
-      label: posterUrl ? "封面已解析" : "当前未解析到封面图",
+      label: posterUrl ? "Poster artwork resolved" : "Poster artwork not available yet",
     },
     {
       icon: "text_snippet",
       label: analysis?.transcriptSource
-        ? `转写来源：${
+        ? `Transcript ${
             analysis.transcriptSource === "mock"
-              ? "Mock Transcript"
-              : "Remote Transcript"
+              ? "Mock Source"
+              : "Remote Source"
           }`
-        : "尚未生成转写内容",
+        : "Transcript not generated yet",
     },
   ];
 }
@@ -137,15 +146,20 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
       isRecord(payload.error) &&
       typeof payload.error.message === "string"
         ? payload.error.message
-        : "请求失败，请稍后重试。";
+        : "Request failed. Please try again.";
 
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: response.status });
   }
 
   return payload as T;
 }
 
-export default function DashboardClient() {
+export default function DashboardClient({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean;
+}) {
+  const { openAuthModal } = useAuthModal();
   const [videoUrl, setVideoUrl] = useState(DEFAULT_VIDEO_URL);
   const [analysis, setAnalysis] = useState<AnalysisPublicTask | null>(null);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
@@ -193,7 +207,7 @@ export default function DashboardClient() {
         if (!cancelled) {
           setViewStatus("error");
           setErrorMessage(
-            error instanceof Error ? error.message : "轮询分析结果失败。",
+            error instanceof Error ? error.message : "Polling analysis results failed.",
           );
         }
       }
@@ -207,9 +221,16 @@ export default function DashboardClient() {
         clearTimeout(timeoutId);
       }
     };
-  }, [activeAnalysisId, pollAnalysis, viewStatus]);
+  }, [activeAnalysisId, viewStatus]);
 
   const handleAnalyze = async () => {
+    if (!isAuthenticated) {
+      setViewStatus("idle");
+      setErrorMessage("Sign in to create a video analysis task and store it in your workspace.");
+      openAuthModal("/dashboard");
+      return;
+    }
+
     setChatError(null);
     setErrorMessage(null);
     setViewStatus("submitting");
@@ -222,9 +243,21 @@ export default function DashboardClient() {
 
       commitAnalysis(response.analysis);
     } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        error.status === 401
+      ) {
+        setViewStatus("idle");
+        setErrorMessage("Your session expired. Sign in again to continue analyzing videos.");
+        openAuthModal("/dashboard");
+        return;
+      }
+
       setViewStatus("error");
       setErrorMessage(
-        error instanceof Error ? error.message : "创建分析任务失败。",
+        error instanceof Error ? error.message : "Creating the analysis task failed.",
       );
     }
   };
@@ -251,7 +284,7 @@ export default function DashboardClient() {
       });
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : "发送问题失败，请稍后重试。",
+        error instanceof Error ? error.message : "Sending the follow-up question failed.",
       );
     } finally {
       setIsChatPending(false);
@@ -260,12 +293,17 @@ export default function DashboardClient() {
 
   const posterUrl = analysis?.video.posterUrl ?? null;
   const title =
-    analysis?.result?.title ?? analysis?.video.title ?? "输入视频链接，开始生成视频摘要";
+    analysis?.result?.title ?? analysis?.video.title ?? "Paste a video link to generate the next insight layer.";
   const description =
     analysis?.result?.summary ??
     analysis?.video.description ??
-    "服务端会校验链接、提取基础信息、获取字幕或真实转写，并生成结构化概要与问答上下文。";
-  const statusMessage = buildStatusMessage(viewStatus, analysis, errorMessage);
+    "The server validates the link, extracts metadata, retrieves transcript context, and turns the result into a reusable analysis workspace.";
+  const statusMessage = buildStatusMessage(
+    viewStatus,
+    analysis,
+    errorMessage,
+    isAuthenticated,
+  );
   const metrics = buildVideoMetrics(analysis, posterUrl);
 
   return (
@@ -273,6 +311,7 @@ export default function DashboardClient() {
       <div className="w-full lg:w-[62%]">
         <VideoSection
           description={description}
+          isAuthenticated={isAuthenticated}
           metrics={metrics}
           onAnalyze={handleAnalyze}
           onVideoUrlChange={setVideoUrl}

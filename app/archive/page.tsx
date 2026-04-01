@@ -30,14 +30,11 @@ export default async function ArchivePage({
   return (
     <AppShell compact>
       <PageHeader
-        description="归档区用于沉淀已经完成整理的分析记录。你可以随时把内容移回资料库继续使用。"
+        description="Archive keeps completed records that you want to store out of the active library. Restore them anytime when you need them again."
         eyebrow="Archive"
-        title={normalizedQuery ? `归档搜索 “${normalizedQuery}”` : "归档"}
+        title={normalizedQuery ? `Archive search "${normalizedQuery}"` : "Archive"}
       />
-      <LibrarySearchForm
-        initialQuery={normalizedQuery}
-        key={normalizedQuery ?? "archive-search"}
-      />
+      <LibrarySearchForm initialQuery={normalizedQuery} key={normalizedQuery ?? "archive-search"} />
       <AnalysisGrid archived query={normalizedQuery} tasks={tasks} />
     </AppShell>
   );

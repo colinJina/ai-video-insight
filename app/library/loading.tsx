@@ -6,9 +6,9 @@ export default function LibraryLoading() {
   return (
     <AppShell compact>
       <PageHeader
-        description="正在加载你的分析记录，请稍候。"
+        description="Loading your analysis records now."
         eyebrow="Library"
-        title="资料库"
+        title="Library"
       />
       <AnalysisGridSkeleton />
     </AppShell>

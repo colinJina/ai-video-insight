@@ -4,9 +4,9 @@ import { layoutWithLines, prepareWithSegments, setLocale } from "@chenglou/prete
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_TYPEWRITER_PHRASES = [
-  "登录后即刻抵达",
-  "压缩成关键结论",
-  "回到可搜索的知识",
+  "searchable insight",
+  "compressed decisions",
+  "a reusable knowledge layer",
 ];
 
 type HeroTypewriterProps = {
@@ -21,7 +21,7 @@ type HeroTypewriterProps = {
 
 const segmenter =
   typeof Intl !== "undefined" && "Segmenter" in Intl
-    ? new Intl.Segmenter("zh-CN", { granularity: "grapheme" })
+    ? new Intl.Segmenter("en-US", { granularity: "grapheme" })
     : null;
 
 function splitGraphemes(text: string) {
@@ -62,7 +62,7 @@ function getFontShorthand(style: CSSStyleDeclaration) {
 export default function HeroTypewriter({
   className = "mt-3 block bg-linear-to-r from-primary via-(--primary-strong) to-[#ffd1a6] bg-clip-text text-transparent",
   deleteDelay = 38,
-  locale = "zh-CN",
+  locale = "en-US",
   pauseDelay = 1500,
   phrases = DEFAULT_TYPEWRITER_PHRASES,
   restartDelay = 260,
@@ -129,8 +129,6 @@ export default function HeroTypewriter({
     const resizeObserver = new ResizeObserver(scheduleUpdate);
     resizeObserver.observe(element);
 
-    void document.fonts?.ready.then(scheduleUpdate);
-
     return () => {
       resizeObserver.disconnect();
       if (frameRef.current !== null) {
@@ -140,31 +138,41 @@ export default function HeroTypewriter({
   }, [phrases]);
 
   useEffect(() => {
-    const atPhraseEnd = visibleCount >= activeSegments.length;
-    const atPhraseStart = visibleCount === 0;
-
-    let delay = isDeleting ? deleteDelay : typeDelay;
-
-    if (!isDeleting && atPhraseEnd) {
-      delay = pauseDelay;
-    } else if (isDeleting && atPhraseStart) {
-      delay = restartDelay;
+    if (!activePhrase) {
+      return;
     }
 
+    const fullLength = activeSegments.length;
+    const doneTyping = visibleCount >= fullLength;
+    const doneDeleting = visibleCount === 0;
+
+    const nextDelay = isDeleting
+      ? deleteDelay
+      : doneTyping
+        ? pauseDelay
+        : typeDelay;
+
     timeoutRef.current = window.setTimeout(() => {
-      if (!isDeleting && atPhraseEnd) {
-        setIsDeleting(true);
-        return;
-      }
+      if (isDeleting) {
+        if (!doneDeleting) {
+          setVisibleCount((count) => Math.max(0, count - 1));
+          return;
+        }
 
-      if (isDeleting && atPhraseStart) {
         setIsDeleting(false);
-        setActiveIndex((current) => (current + 1) % phrases.length);
+        setActiveIndex((index) => (index + 1) % phrases.length);
         return;
       }
 
-      setVisibleCount((current) => current + (isDeleting ? -1 : 1));
-    }, delay);
+      if (!doneTyping) {
+        setVisibleCount((count) => Math.min(fullLength, count + 1));
+        return;
+      }
+
+      setTimeout(() => {
+        setIsDeleting(true);
+      }, restartDelay);
+    }, nextDelay);
 
     return () => {
       if (timeoutRef.current !== null) {
@@ -172,6 +180,7 @@ export default function HeroTypewriter({
       }
     };
   }, [
+    activePhrase,
     activeSegments.length,
     deleteDelay,
     isDeleting,
@@ -182,37 +191,13 @@ export default function HeroTypewriter({
     visibleCount,
   ]);
 
-  const lines =
-    metrics && visibleText
-      ? layoutWithLines(
-          prepareWithSegments(visibleText, metrics.font),
-          metrics.width,
-          metrics.lineHeight,
-        ).lines
-      : [];
-
   return (
     <span
-      ref={textRef}
-      className={`typewriter-shell ${className}`}
-      style={{
-        minHeight: metrics ? `${metrics.reservedHeight}px` : undefined,
-      }}
+      className={`typewriter-shell inline-flex items-end ${className}`}
+      style={metrics ? { minHeight: metrics.reservedHeight } : undefined}
     >
-      {lines.length > 0 ? (
-        lines.map((line, index) => (
-          <span className="typewriter-line block" key={`${activePhrase}-${index}-${line.text}`}>
-            {line.text}
-            {index === lines.length - 1 ? (
-              <span aria-hidden="true" className="typewriter-cursor ml-1 inline-block" />
-            ) : null}
-          </span>
-        ))
-      ) : (
-        <span className="typewriter-line block">
-          <span aria-hidden="true" className="typewriter-cursor inline-block" />
-        </span>
-      )}
+      <span ref={textRef}>{visibleText}</span>
+      <span aria-hidden="true" className="typewriter-cursor ml-2 inline-block" />
     </span>
   );
 }

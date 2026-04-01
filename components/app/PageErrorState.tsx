@@ -25,7 +25,7 @@ export default function PageErrorState({
         onClick={onRetry}
         type="button"
       >
-        重试
+        Retry
       </button>
     </div>
   );

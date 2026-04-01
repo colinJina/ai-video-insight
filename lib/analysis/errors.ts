@@ -18,14 +18,14 @@ export class ValidationError extends AnalysisError {
 }
 
 export class UnauthorizedError extends AnalysisError {
-  constructor(message = "请先登录后继续。") {
+  constructor(message = "Please sign in before continuing.") {
     super(message, 401, "UNAUTHORIZED");
     this.name = "UnauthorizedError";
   }
 }
 
 export class ForbiddenError extends AnalysisError {
-  constructor(message = "你没有权限访问这项内容。") {
+  constructor(message = "You do not have permission to access this content.") {
     super(message, 403, "FORBIDDEN");
     this.name = "ForbiddenError";
   }
@@ -74,9 +74,9 @@ export function getPublicErrorMessage(error: unknown) {
     }
 
     if (error instanceof ExternalServiceError) {
-      return "AI 服务暂时不可用，请稍后重试。";
+      return "The AI service is temporarily unavailable. Please try again shortly.";
     }
   }
 
-  return "服务端暂时无法完成请求，请稍后重试。";
+  return "The server could not complete the request right now. Please try again.";
 }

@@ -23,18 +23,18 @@ const THEME_OPTIONS: Array<{
 }> = [
   {
     value: "system",
-    label: "跟随系统",
-    description: "默认跟随设备主题。",
+    label: "System",
+    description: "Follow the device theme by default.",
   },
   {
     value: "light",
-    label: "浅色",
-    description: "适合长时间阅读与整理。",
+    label: "Light",
+    description: "Best for long reading and active organization work.",
   },
   {
     value: "dark",
-    label: "深色",
-    description: "更适合沉浸式工作环境。",
+    label: "Dark",
+    description: "Designed for a focused, immersive workspace.",
   },
 ];
 
@@ -91,7 +91,7 @@ export default function SettingsForm({
 
     if (!authenticated) {
       window.localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(draft));
-      setMessage("设置已保存到本地浏览器。登录后会自动切换为云端存储。");
+      setMessage("Settings were saved in this browser. They will switch to cloud storage after sign-in.");
       return;
     }
 
@@ -105,14 +105,16 @@ export default function SettingsForm({
       });
 
       if (!response.ok) {
-        throw new Error("保存设置失败，请稍后重试。");
+        throw new Error("Saving settings failed. Please try again.");
       }
 
       startTransition(() => {
-        setMessage("设置已保存。");
+        setMessage("Settings saved.");
       });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "保存设置失败，请稍后重试。");
+      setError(
+        nextError instanceof Error ? nextError.message : "Saving settings failed. Please try again.",
+      );
     }
   };
 
@@ -135,12 +137,12 @@ export default function SettingsForm({
             </div>
             <div>
               <h2 className="font-headline text-2xl font-bold tracking-[-0.04em] text-white">
-                {draft.nickname.trim() || "未设置昵称"}
+                {draft.nickname.trim() || "No display name yet"}
               </h2>
               <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
                 {authenticated
-                  ? "保存后会作为你的账号资料展示在导航栏和个人空间中。"
-                  : "当前为访客模式，保存后会写入本地浏览器。"}
+                  ? "Saved profile details appear in the navigation and across your private workspace."
+                  : "You are editing guest-mode settings. Saving writes to this browser only."}
               </p>
             </div>
           </div>
@@ -148,15 +150,15 @@ export default function SettingsForm({
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(18,9,2,0.52)] px-4 py-4">
               <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-white">
-                通知状态
+                Notifications
               </p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
-                {draft.notificationsEnabled ? "已开启提醒" : "当前关闭提醒"}
+                {draft.notificationsEnabled ? "Alerts are enabled" : "Alerts are turned off"}
               </p>
             </div>
             <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(18,9,2,0.52)] px-4 py-4">
               <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-white">
-                主题偏好
+                Theme
               </p>
               <p className="mt-2 text-sm leading-7 text-[color:var(--text-muted)]">
                 {THEME_OPTIONS.find((option) => option.value === draft.themePreference)?.label}
@@ -170,14 +172,14 @@ export default function SettingsForm({
         <div className="grid gap-5 md:grid-cols-2">
           <label className="space-y-3">
             <span className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-[color:var(--primary-strong)]">
-              昵称
+              Display Name
             </span>
             <input
               className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(223,192,175,0.42)] focus:border-[color:var(--primary-strong)]"
               onChange={(event) =>
                 setDraft((current) => ({ ...current, nickname: event.target.value }))
               }
-              placeholder="给自己起一个展示昵称"
+              placeholder="Choose a public display name"
               type="text"
               value={draft.nickname}
             />
@@ -185,7 +187,7 @@ export default function SettingsForm({
 
           <label className="space-y-3">
             <span className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-[color:var(--primary-strong)]">
-              头像地址
+              Avatar URL
             </span>
             <input
               className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(223,192,175,0.42)] focus:border-[color:var(--primary-strong)]"
@@ -214,17 +216,17 @@ export default function SettingsForm({
             />
             <span>
               <span className="block font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-white">
-                通知开关
+                Notification Toggle
               </span>
               <span className="mt-2 block text-sm leading-7 text-[color:var(--text-muted)]">
-                控制分析完成、失败和系统提示是否保留在个人设置中。
+                Control whether completion alerts, failure notices, and system updates remain active for this account.
               </span>
             </span>
           </label>
 
           <div className="space-y-3">
             <span className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-[color:var(--primary-strong)]">
-              主题偏好
+              Theme Preference
             </span>
             <div className="grid gap-3">
               {THEME_OPTIONS.map((option) => {
@@ -273,15 +275,15 @@ export default function SettingsForm({
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm leading-7 text-[color:var(--text-muted)]">
             {authenticated
-              ? "当前设置会同步保存到 Supabase 数据库。"
-              : "未登录状态下，设置会退化保存到 localStorage。"}
+              ? "These settings sync to your Supabase-backed profile."
+              : "While signed out, settings are stored in localStorage."}
           </p>
           <button
             className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02] disabled:opacity-60"
             disabled={isPending}
             type="submit"
           >
-            保存设置
+            Save Settings
           </button>
         </div>
       </section>

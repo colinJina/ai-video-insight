@@ -3,47 +3,47 @@ import RevealOnView from "./RevealOnView";
 const steps = [
   {
     icon: "link",
-    title: "1. 粘贴视频链接",
+    title: "1. Paste a video URL",
     description:
-      "支持 YouTube、Bilibili、TikTok 与本地录屏，系统会自动识别内容结构并拉起分析流程。",
+      "Use YouTube, Bilibili, TikTok, screen recordings, or hosted files. The system detects structure and starts the analysis flow automatically.",
   },
   {
     icon: "neurology",
-    title: "2. 等待 AI 建模",
+    title: "2. Wait for the AI model",
     description:
-      "语音、字幕、视觉片段与语义节点并行分析，自动生成摘要、标签、时间轴与追问上下文。",
+      "Speech, captions, visual segments, and semantic cues are processed in parallel to generate a summary, labels, timeline, and follow-up context.",
   },
   {
     icon: "insights",
-    title: "3. 进入知识工作台",
+    title: "3. Enter the knowledge workspace",
     description:
-      "摘要、问答、目录和关键节点统一收束，登录后就能立刻继续浏览、追问和回看。",
+      "Summary, questions, outline, and key moments resolve into one place so you can browse, revisit, and continue the conversation immediately after sign-in.",
   },
 ];
 
 const features = [
   {
-    title: "结构化摘要",
+    title: "Structured Summary",
     icon: "auto_awesome_motion",
     accent: "text-primary",
     description:
-      "基于多模态分析生成结构化摘要，把冗长视频压缩成几屏内就能读完的关键结论。",
+      "Multimodal analysis turns long videos into a structured summary you can read in a few screens instead of scrubbing through the full recording.",
     wide: true,
   },
   {
-    title: "追问式检索",
+    title: "Conversational Retrieval",
     icon: "forum",
     accent: "text-secondary",
     description:
-      "像和内容本身对话一样继续发问，快速定位人物、观点、转折点与关键时间段。",
+      "Ask follow-up questions as if you were talking to the content itself and quickly locate people, opinions, pivots, and key moments.",
     wide: false,
   },
   {
-    title: "时间轴大纲",
+    title: "Timeline Outline",
     icon: "list_alt",
     accent: "text-primary",
     description:
-      "自动标注内容节点，点击任意条目就能跳回对应时刻，不再手动拖动进度条。",
+      "Important content nodes are marked automatically so one click can take you back to the relevant point without manual scrubbing.",
     wide: false,
   },
 ];
@@ -58,29 +58,21 @@ export default function OverviewSection() {
       >
         <div className="mb-16 text-center">
           <h2 className="font-headline text-4xl font-bold tracking-[-0.04em] text-white">
-            三步完成，从视频到洞察
+            Three steps from video to insight
           </h2>
           <div className="mx-auto mt-5 h-1 w-24 rounded-full bg-primary/60" />
         </div>
 
         <div className="grid gap-10 md:grid-cols-3 md:gap-12">
           {steps.map((step, index) => (
-            <RevealOnView
-              key={step.title}
-              className="relative text-center"
-              delay={index * 0.12}
-            >
+            <RevealOnView key={step.title} className="relative text-center" delay={index * 0.12}>
               <div className="obsidian-shadow glass-card relative mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full transition-transform duration-300 hover:scale-110">
                 <span className="material-symbols-outlined text-4xl text-primary">
                   {step.icon}
                 </span>
               </div>
-              <h3 className="font-headline text-xl font-bold text-white">
-                {step.title}
-              </h3>
-              <p className="mt-4 leading-7 text-(--text-muted)">
-                {step.description}
-              </p>
+              <h3 className="font-headline text-xl font-bold text-white">{step.title}</h3>
+              <p className="mt-4 leading-7 text-(--text-muted)">{step.description}</p>
               {index < steps.length - 1 ? (
                 <div className="absolute -right-8 top-12 hidden h-px w-16 bg-[rgba(88,66,53,0.35)] md:block" />
               ) : null}
@@ -94,16 +86,15 @@ export default function OverviewSection() {
           <div className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <h2 className="font-headline text-4xl font-bold tracking-[-0.05em] text-white md:text-5xl">
-                覆盖从浏览入口到登录后的整段智能体验
+                A single visual system from landing page to signed-in workspace
               </h2>
               <p className="mt-6 text-lg leading-8 text-(--text-muted)">
-                首页负责把能力讲清楚，登录后负责把知识真正交到你手里。视觉上我们保持同一套 amber
-                obsidian 语言，让用户从首次进入到进入工作台的感受是连续的。
+                The homepage explains the capability. The signed-in workspace delivers the usable knowledge. We keep the same amber obsidian language across both so the first impression and the working experience feel continuous.
               </p>
             </div>
             <div className="pb-2">
               <span className="border-b-2 border-primary pb-2 font-headline text-sm font-bold uppercase tracking-[0.24em] text-primary">
-                核心能力
+                Core Capabilities
               </span>
             </div>
           </div>
@@ -122,12 +113,8 @@ export default function OverviewSection() {
                 <span className={`material-symbols-outlined mb-6 text-3xl ${feature.accent}`}>
                   {feature.icon}
                 </span>
-                <h3 className="font-headline text-2xl font-bold text-white">
-                  {feature.title}
-                </h3>
-                <p className="mt-4 leading-7 text-(--text-muted)">
-                  {feature.description}
-                </p>
+                <h3 className="font-headline text-2xl font-bold text-white">{feature.title}</h3>
+                <p className="mt-4 leading-7 text-(--text-muted)">{feature.description}</p>
 
                 {feature.wide ? (
                   <div className="mt-8 rounded-2xl border border-[rgba(88,66,53,0.14)] bg-surface-container-low p-4">
@@ -151,11 +138,9 @@ export default function OverviewSection() {
                   <span className="material-symbols-outlined mb-6 text-3xl text-primary">
                     devices
                   </span>
-                  <h3 className="font-headline text-2xl font-bold text-white">
-                    多平台输入
-                  </h3>
+                  <h3 className="font-headline text-2xl font-bold text-white">Multi-Source Input</h3>
                   <p className="mt-4 leading-7 text-(--text-muted)">
-                    无缝接入 YouTube、Bilibili、TikTok、Zoom 录屏和本地素材，保持统一的知识入口。
+                    Bring in YouTube, Bilibili, TikTok, Zoom recordings, and local assets through one consistent knowledge entry point.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 opacity-30 grayscale">

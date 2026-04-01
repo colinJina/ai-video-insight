@@ -37,17 +37,14 @@ export default async function LibraryPage({
             className="inline-flex rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02]"
             href="/dashboard"
           >
-            新建分析
+            New Analysis
           </Link>
         }
-        description="这里集中展示当前账号的全部分析记录，支持搜索、查看详情和一键归档。默认按创建时间倒序排列。"
+        description="This is the home for every analysis tied to your account. Search, open details, and archive records from one place."
         eyebrow="Library"
-        title={normalizedQuery ? `搜索 “${normalizedQuery}”` : "资料库"}
+        title={normalizedQuery ? `Search "${normalizedQuery}"` : "Library"}
       />
-      <LibrarySearchForm
-        initialQuery={normalizedQuery}
-        key={normalizedQuery ?? "library-search"}
-      />
+      <LibrarySearchForm initialQuery={normalizedQuery} key={normalizedQuery ?? "library-search"} />
       <AnalysisGrid archived={false} query={normalizedQuery} tasks={tasks} />
     </AppShell>
   );

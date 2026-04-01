@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: {
-          message: "请输入有效的邮箱地址。",
+          message: "Please enter a valid email address.",
         },
       },
       { status: 400 },

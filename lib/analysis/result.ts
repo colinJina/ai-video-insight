@@ -20,9 +20,9 @@ function segmentToOutlineText(segment: TranscriptSegment) {
 
 function buildDefaultQuestions(title: string) {
   return [
-    `这段关于“${title}”的视频最重要的结论是什么？`,
-    "如果我要快速回看，应该优先看哪几个时间点？",
-    "这段内容里有哪些可以直接落地的做法？",
+    `What is the most important conclusion from this video about "${title}"?`,
+    "If I only have a minute to review it, which timestamps matter most?",
+    "What actions or decisions can I take directly from this content?",
   ];
 }
 
@@ -48,7 +48,7 @@ export function buildFallbackStructuredSummary(
   return {
     title: input.video.title,
     summary: trimText(
-      `这段视频围绕“${input.video.title}”展开，重点讨论了背景、方法与结论三个层面。${summarySource}`,
+      `This video centers on "${input.video.title}" and moves through the problem framing, the working method, and the final conclusion. ${summarySource}`,
       240,
     ),
     outline,
@@ -158,13 +158,11 @@ export function safeParseStructuredSummary(
   return normalizeStructuredSummary(parsed, fallback, createValidOutlineTimes(input));
 }
 
-export function buildAnalysisResult(
-  summary: StructuredVideoSummary,
-): AnalysisResult {
+export function buildAnalysisResult(summary: StructuredVideoSummary): AnalysisResult {
   return {
     ...summary,
     chatContext: {
-      intro: `我已经完成这段视频的首轮分析。快速结论是：${summary.summary}`,
+      intro: `I finished the first-pass analysis for this video. The quick read is: ${summary.summary}`,
       suggestedQuestions:
         summary.suggestedQuestions.length > 0
           ? summary.suggestedQuestions
