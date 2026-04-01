@@ -94,14 +94,17 @@ export default function HeroTypewriter({
 
   useEffect(() => {
     const element = textRef.current;
+    // 获取父元素（也就是外层的 <h1> 或者是 typewriter-shell 的父级）
+    const parentElement = element?.closest('.typewriter-shell')?.parentElement;
 
-    if (!element) {
+    if (!element || !parentElement) {
       return;
     }
 
     const updateMetrics = () => {
       const style = window.getComputedStyle(element);
-      const width = element.clientWidth;
+      // ✅ 关键修复：使用父元素的宽度作为排版计算的边界，而不是当前打字 span 的宽度
+      const width = parentElement.clientWidth;
 
       if (!width) {
         return;
@@ -111,6 +114,7 @@ export default function HeroTypewriter({
       const lineHeight = getLineHeight(style);
       const reservedHeight = phrases.reduce((maxHeight, phrase) => {
         const prepared = prepareWithSegments(phrase, font);
+        // 基于父元素的真实宽度计算这句 phrase 实际会占据几行
         const { height } = layoutWithLines(prepared, width, lineHeight);
         return Math.max(maxHeight, height);
       }, lineHeight);
@@ -122,14 +126,14 @@ export default function HeroTypewriter({
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
       }
-
       frameRef.current = requestAnimationFrame(updateMetrics);
     };
 
     scheduleUpdate();
 
+    // ✅ 关键修复：监听父元素尺寸变化，而不是监听打字 span（避免打字时疯狂触发重算）
     const resizeObserver = new ResizeObserver(scheduleUpdate);
-    resizeObserver.observe(element);
+    resizeObserver.observe(parentElement);
 
     return () => {
       resizeObserver.disconnect();
@@ -137,7 +141,7 @@ export default function HeroTypewriter({
         cancelAnimationFrame(frameRef.current);
       }
     };
-  }, [phrases]);
+  }, [phrases]); // 依赖项保持不变
 
   useEffect(() => {
     if (!activePhrase) {

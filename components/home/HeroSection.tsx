@@ -21,7 +21,7 @@ export default function HeroSection() {
       </div>
 
       <h1 className="font-headline text-5xl font-bold tracking-[-0.06em] text-on-surface sm:text-6xl lg:text-8xl">
-        Turn long-form video into
+      <span className="block">Turn long-form video into</span>
         <HeroTypewriter />
       </h1>
 
