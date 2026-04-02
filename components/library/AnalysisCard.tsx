@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 
 import StatusBadge from "@/components/app/StatusBadge";
 import type { AnalysisPublicTask } from "@/lib/analysis/types";
+import { isUploadedVideoSource } from "@/lib/analysis/utils";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -24,6 +25,7 @@ export default function AnalysisCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const isUploadedVideo = isUploadedVideoSource(task.video);
 
   const handleArchiveToggle = async () => {
     setError(null);
@@ -74,9 +76,11 @@ export default function AnalysisCard({
         </p>
         <div className="rounded-2xl border border-[color:rgba(88,66,53,0.18)] bg-[color:rgba(23,12,3,0.66)] px-4 py-3 text-xs leading-6 text-[color:rgba(223,192,175,0.72)]">
           <span className="block font-headline uppercase tracking-[0.18em] text-[color:var(--text-muted)]">
-            Source URL
+            {isUploadedVideo ? "Uploaded File" : "Source URL"}
           </span>
-          <span className="mt-1 block break-all">{task.video.originalUrl}</span>
+          <span className="mt-1 block break-all">
+            {isUploadedVideo ? task.video.fileName ?? task.video.title : task.video.originalUrl}
+          </span>
         </div>
       </div>
 

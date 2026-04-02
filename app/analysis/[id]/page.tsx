@@ -4,6 +4,7 @@ import AppShell from "@/components/app/AppShell";
 import StatusBadge from "@/components/app/StatusBadge";
 import { getAnalysisTask, getAnalysisTaskForUser } from "@/lib/analysis/service";
 import { getOptionalAppSession } from "@/lib/auth/session";
+import { isUploadedVideoSource } from "@/lib/analysis/utils";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -22,6 +23,7 @@ export default async function AnalysisDetailPage({
   const analysis = session
     ? await getAnalysisTaskForUser(id, session.user.id)
     : await getAnalysisTask(id);
+  const isUploadedVideo = isUploadedVideoSource(analysis.video);
 
   return (
     <AppShell compact>
@@ -55,16 +57,22 @@ export default async function AnalysisDetailPage({
           <div className="space-y-4">
             <div>
               <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
-                Source URL
+                {isUploadedVideo ? "Uploaded File" : "Source URL"}
               </p>
-              <a
-                className="mt-3 block break-all text-sm leading-7 text-[color:var(--text-muted)] hover:text-primary"
-                href={analysis.video.originalUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {analysis.video.originalUrl}
-              </a>
+              {isUploadedVideo ? (
+                <p className="mt-3 block break-all text-sm leading-7 text-[color:var(--text-muted)]">
+                  {analysis.video.fileName ?? analysis.video.title}
+                </p>
+              ) : (
+                <a
+                  className="mt-3 block break-all text-sm leading-7 text-[color:var(--text-muted)] hover:text-primary"
+                  href={analysis.video.originalUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {analysis.video.originalUrl}
+                </a>
+              )}
             </div>
 
             <div>

@@ -1,9 +1,12 @@
 export type VideoProvider =
   | "direct"
+  | "local"
   | "youtube"
   | "vimeo"
   | "bilibili"
   | "generic";
+
+export type VideoInputKind = "url" | "upload";
 
 export type AnalysisTaskStatus =
   | "queued"
@@ -26,11 +29,16 @@ export interface VideoSource {
   normalizedUrl: string;
   host: string;
   provider: VideoProvider;
+  inputKind: VideoInputKind;
   title: string;
   description: string | null;
   posterUrl: string | null;
   playableUrl: string | null;
   durationSeconds: number | null;
+  fileName?: string | null;
+  fileSizeBytes?: number | null;
+  mimeType?: string | null;
+  localFilePath?: string | null;
 }
 
 export interface TranscriptSegment {
@@ -100,7 +108,15 @@ export interface AnalysisListInput {
 }
 
 export interface CreateAnalysisInput {
-  videoUrl: string;
+  videoUrl?: string;
+  uploadedVideo?:
+    | {
+        fileName: string;
+        mimeType: string;
+        fileSizeBytes: number;
+        buffer: ArrayBuffer;
+      }
+    | undefined;
 }
 
 export interface ChatInput {

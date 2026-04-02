@@ -237,6 +237,20 @@ export async function prepareTranscriptMedia(
   video: VideoSource,
   uploadFile: UploadFile,
 ): Promise<PreparedTranscriptMedia> {
+  if (video.provider === "local" && video.localFilePath) {
+    const uploadedUrl = await uploadFile({
+      filePath: video.localFilePath,
+      contentType: video.mimeType ?? inferContentType(video.localFilePath),
+    });
+
+    return {
+      audioUrl: uploadedUrl,
+      cleanup: async () => {
+        await rm(video.localFilePath ?? "", { force: true }).catch(() => undefined);
+      },
+    };
+  }
+
   const directUrl = video.playableUrl ?? video.normalizedUrl;
   if (isDirectMediaUrl(directUrl)) {
     return {

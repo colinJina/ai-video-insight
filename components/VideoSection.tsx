@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 
 import type { AnalysisViewStatus } from "@/lib/analysis/types";
 
@@ -45,8 +45,11 @@ type VideoSectionProps = {
   isAuthenticated: boolean;
   metrics: VideoMetric[];
   onAnalyze: () => void | Promise<void>;
+  fileInputKey: number;
+  onVideoFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onVideoUrlChange: (value: string) => void;
   posterSrc?: string | null;
+  selectedFileName?: string | null;
   status: AnalysisViewStatus;
   statusMessage: string;
   title: string;
@@ -58,8 +61,11 @@ const VideoSection = ({
   isAuthenticated,
   metrics,
   onAnalyze,
+  fileInputKey,
+  onVideoFileChange,
   onVideoUrlChange,
   posterSrc,
+  selectedFileName,
   status,
   statusMessage,
   title,
@@ -170,6 +176,28 @@ const VideoSection = ({
             >
               {isAuthenticated ? statusMeta.button : "Sign In To Analyze"}
             </button>
+          </div>
+
+          <div className="mt-5 border-t border-[rgba(88,66,53,0.18)] pt-5">
+            <label
+              className="font-headline text-[10px] font-bold uppercase tracking-[0.24em] text-(--primary-strong)"
+              htmlFor="dashboard-video-file"
+            >
+              Local MP4 Upload
+            </label>
+            <input
+              accept="video/mp4,.mp4"
+              className="mt-3 block w-full rounded-xl border border-[rgba(88,66,53,0.3)] bg-[rgba(23,12,3,0.8)] px-4 py-3 text-sm text-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-[rgba(255,127,0,0.16)] file:px-3 file:py-2 file:font-headline file:text-xs file:font-bold file:uppercase file:tracking-[0.18em] file:text-primary"
+              id="dashboard-video-file"
+              key={fileInputKey}
+              onChange={onVideoFileChange}
+              type="file"
+            />
+            <p className="mt-2 text-xs leading-6 text-(--text-muted)">
+              {selectedFileName
+                ? `Selected file: ${selectedFileName}`
+                : "Choose a local MP4 file if you do not want to paste a public URL."}
+            </p>
           </div>
 
           <p

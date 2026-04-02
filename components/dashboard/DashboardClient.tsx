@@ -2,6 +2,7 @@
 
 import {
   startTransition,
+  type ChangeEvent,
   useEffect,
   useEffectEvent,
   useState,
@@ -15,7 +16,7 @@ import type {
   AnalysisTaskStatus,
   AnalysisViewStatus,
 } from "@/lib/analysis/types";
-import { isRecord } from "@/lib/analysis/utils";
+import { isRecord, isUploadedVideoSource } from "@/lib/analysis/utils";
 
 const DEFAULT_VIDEO_URL =
   "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
@@ -60,7 +61,7 @@ function buildStatusMessage(
   isAuthenticated: boolean,
 ) {
   if (!isAuthenticated && viewStatus === "idle") {
-    return "Paste a video URL, then sign in from the modal before we create the analysis task.";
+    return "Paste a video URL or upload an MP4 file, then sign in from the modal before we create the analysis task.";
   }
 
   if (viewStatus === "submitting") {
@@ -87,7 +88,7 @@ function buildStatusMessage(
     return errorMessage ?? "Analysis failed. Check the video link and try again.";
   }
 
-  return "Enter a public video URL and start the workflow to extract metadata, transcript context, and a structured summary.";
+  return "Enter a public video URL or upload an MP4 file to extract metadata, transcript context, and a structured summary.";
 }
 
 function buildVideoMetrics(
@@ -99,7 +100,7 @@ function buildVideoMetrics(
       icon: "link",
       label: analysis?.video.host
         ? `Source ${analysis.video.host}`
-        : "Supports HTTP and HTTPS video links",
+        : "Supports URLs and local MP4 uploads",
     },
     {
       icon: "schedule",
@@ -123,11 +124,13 @@ function buildVideoMetrics(
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const isFormDataPayload =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
   const response = await fetch(input, {
     cache: "no-store",
     ...init,
     headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(!isFormDataPayload && init?.body ? { "Content-Type": "application/json" } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -161,6 +164,8 @@ export default function DashboardClient({
 }) {
   const { openAuthModal } = useAuthModal();
   const [videoUrl, setVideoUrl] = useState(DEFAULT_VIDEO_URL);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [analysis, setAnalysis] = useState<AnalysisPublicTask | null>(null);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
   const [viewStatus, setViewStatus] = useState<AnalysisViewStatus>("idle");
@@ -236,10 +241,19 @@ export default function DashboardClient({
     setViewStatus("submitting");
 
     try {
-      const response = await requestJson<AnalysisResponse>("/api/analyze", {
-        method: "POST",
-        body: JSON.stringify({ videoUrl }),
-      });
+      const response = videoFile
+        ? await (async () => {
+            const formData = new FormData();
+            formData.set("videoFile", videoFile);
+            return requestJson<AnalysisResponse>("/api/analyze", {
+              method: "POST",
+              body: formData,
+            });
+          })()
+        : await requestJson<AnalysisResponse>("/api/analyze", {
+            method: "POST",
+            body: JSON.stringify({ videoUrl }),
+          });
 
       commitAnalysis(response.analysis);
     } catch (error) {
@@ -259,6 +273,24 @@ export default function DashboardClient({
       setErrorMessage(
         error instanceof Error ? error.message : "Creating the analysis task failed.",
       );
+    }
+  };
+
+  const handleVideoUrlChange = (value: string) => {
+    setVideoUrl(value);
+
+    if (value.trim()) {
+      setVideoFile(null);
+      setFileInputKey((current) => current + 1);
+    }
+  };
+
+  const handleVideoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    setVideoFile(nextFile);
+
+    if (nextFile) {
+      setVideoUrl("");
     }
   };
 
@@ -305,6 +337,9 @@ export default function DashboardClient({
     isAuthenticated,
   );
   const metrics = buildVideoMetrics(analysis, posterUrl);
+  const activeFileName =
+    videoFile?.name ??
+    (analysis && isUploadedVideoSource(analysis.video) ? analysis.video.fileName ?? null : null);
 
   return (
     <div className="flex w-full flex-col gap-8 lg:flex-row lg:pb-12">
@@ -314,8 +349,11 @@ export default function DashboardClient({
           isAuthenticated={isAuthenticated}
           metrics={metrics}
           onAnalyze={handleAnalyze}
-          onVideoUrlChange={setVideoUrl}
+          fileInputKey={fileInputKey}
+          onVideoFileChange={handleVideoFileChange}
+          onVideoUrlChange={handleVideoUrlChange}
           posterSrc={posterUrl}
+          selectedFileName={activeFileName}
           status={viewStatus}
           statusMessage={statusMessage}
           title={title}

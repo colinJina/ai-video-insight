@@ -1,3 +1,6 @@
+import { open } from "node:fs/promises";
+import { extname } from "node:path";
+
 import type { VideoSource } from "@/lib/analysis/types";
 import {
   assertValidVideoUrl,
@@ -283,6 +286,52 @@ async function probeDirectVideoDuration(url: URL) {
   return null;
 }
 
+async function readLocalFileRange(filePath: string, start: number, length: number) {
+  const handle = await open(filePath, "r");
+
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    return bytesRead > 0 ? buffer.subarray(0, bytesRead) : null;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function probeLocalVideoDuration(filePath: string, fileSizeBytes: number) {
+  try {
+    const firstChunk = await readLocalFileRange(
+      filePath,
+      0,
+      DIRECT_VIDEO_PROBE_RANGE_BYTES,
+    );
+
+    if (firstChunk) {
+      const durationFromStart = readMp4DurationFromBuffer(firstChunk);
+      if (durationFromStart !== null) {
+        return durationFromStart;
+      }
+    }
+
+    if (fileSizeBytes > DIRECT_VIDEO_PROBE_RANGE_BYTES) {
+      const start = Math.max(0, fileSizeBytes - DIRECT_VIDEO_PROBE_RANGE_BYTES);
+      const tailChunk = await readLocalFileRange(
+        filePath,
+        start,
+        DIRECT_VIDEO_PROBE_RANGE_BYTES,
+      );
+
+      if (tailChunk) {
+        return readMp4DurationFromBuffer(tailChunk);
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 type RemotePageMetadata = {
   title: string | null;
   description: string | null;
@@ -369,6 +418,7 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
     normalizedUrl,
     host,
     provider,
+    inputKind: "url",
     title: remoteMetadata?.title ?? fallbackTitle,
     description:
       remoteMetadata?.description ??
@@ -376,5 +426,42 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
     posterUrl: remoteMetadata?.posterUrl ?? null,
     playableUrl: derivedPlayableUrl,
     durationSeconds,
+    fileName: null,
+    fileSizeBytes: null,
+    mimeType: null,
+    localFilePath: null,
+  };
+}
+
+export async function extractUploadedVideoMetadata(input: {
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  filePath: string;
+}): Promise<VideoSource> {
+  const trimmedFileName = input.fileName.trim() || "uploaded-video.mp4";
+  const extension = extname(trimmedFileName).toLowerCase();
+  const title = trimmedFileName.replace(/\.[a-z0-9]+$/i, "").trim() || "Uploaded video";
+  const durationSeconds =
+    extension === ".mp4"
+      ? await probeLocalVideoDuration(input.filePath, input.fileSizeBytes)
+      : null;
+
+  return {
+    originalUrl: trimmedFileName,
+    normalizedUrl: trimmedFileName,
+    host: "Local upload",
+    provider: "local",
+    inputKind: "upload",
+    title,
+    description:
+      "The server will use the uploaded video file to prepare the transcript and generate a structured summary.",
+    posterUrl: null,
+    playableUrl: null,
+    durationSeconds,
+    fileName: trimmedFileName,
+    fileSizeBytes: input.fileSizeBytes,
+    mimeType: input.mimeType || "video/mp4",
+    localFilePath: input.filePath,
   };
 }

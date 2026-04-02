@@ -119,8 +119,8 @@ export default function LoginForm({
       throw new Error("Please enter your email address first.");
     }
 
-    if (!/^\d{6}$/.test(normalizedCode)) {
-      throw new Error("Please enter the 6-digit verification code.");
+    if (!/^\d{8}$/.test(normalizedCode)) {
+      throw new Error("Please enter the 8-digit verification code.");
     }
 
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -170,7 +170,9 @@ export default function LoginForm({
 
         await submitEmailCode();
         setIsAwaitingEmailCode(true);
-        setMessage("We sent a 6-digit verification code to your email. Enter it below to finish signing in.");
+        setMessage("We sent an 8-digit verification code to your email. Enter it below to finish signing in.");
+        setIsSubmitting(false);
+        setActiveProvider(null);
         return;
       }
 
@@ -252,11 +254,11 @@ export default function LoginForm({
               autoComplete="one-time-code"
               className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.92)] px-4 py-4 text-[15px] tracking-[0.32em] text-[#2f1b0e] outline-none transition-colors placeholder:text-[rgba(120,77,42,0.58)] focus:border-[rgba(191,114,31,0.7)]"
               inputMode="numeric"
-              maxLength={6}
+              maxLength={8}
               onChange={(event) =>
-                setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 8))
               }
-              placeholder="123456"
+              placeholder="12345678"
               type="text"
               value={verificationCode}
             />
@@ -268,7 +270,7 @@ export default function LoginForm({
           disabled={
             isSubmitting ||
             !email.trim() ||
-            (authConfigured && isAwaitingEmailCode && verificationCode.trim().length !== 6)
+            (authConfigured && isAwaitingEmailCode && verificationCode.trim().length !== 8)
           }
           onClick={() => void handleEmailSubmit()}
           type="button"
@@ -291,8 +293,10 @@ export default function LoginForm({
             onClick={() => {
               setVerificationCode("");
               setIsAwaitingEmailCode(false);
-              setMessage("You can request a new 6-digit code for this email.");
+              setMessage("You can request a new 8-digit code for this email.");
               setError(null);
+              setIsSubmitting(false);
+              setActiveProvider(null);
             }}
             type="button"
           >

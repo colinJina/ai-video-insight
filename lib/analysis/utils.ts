@@ -1,6 +1,7 @@
 import { TimeoutError, ValidationError } from "@/lib/analysis/errors";
 import type {
   TranscriptSegment,
+  VideoSource,
   VideoProvider,
 } from "@/lib/analysis/types";
 
@@ -91,6 +92,10 @@ export function detectVideoProvider(url: URL): VideoProvider {
   }
 
   return "generic";
+}
+
+export function isUploadedVideoSource(video: Pick<VideoSource, "inputKind" | "provider">) {
+  return video.inputKind === "upload" || video.provider === "local";
 }
 
 export function isDirectMediaUrl(url: URL | string) {

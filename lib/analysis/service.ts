@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
 
 import {
   ConflictError,
@@ -30,8 +32,12 @@ import {
 } from "@/lib/analysis/utils";
 import { createNotification } from "@/lib/notifications/service";
 import { extractVideoMetadata } from "@/lib/analysis/video-metadata";
+import { extractUploadedVideoMetadata } from "@/lib/analysis/video-metadata";
 
 const runningTasks = new Map<string, Promise<void>>();
+
+const ALLOWED_UPLOAD_EXTENSIONS = new Set([".mp4"]);
+const ALLOWED_UPLOAD_MIME_TYPES = new Set(["video/mp4", "application/mp4"]);
 
 function createAssistantMessage(content: string): AnalysisChatMessage {
   return {
@@ -49,6 +55,48 @@ function createUserMessage(content: string): AnalysisChatMessage {
     content,
     createdAt: new Date().toISOString(),
   };
+}
+
+function getUploadedVideoTempRoot() {
+  if (process.env.VERCEL === "1") {
+    return "/tmp/uploaded-videos";
+  }
+
+  return ".tmp/uploaded-videos";
+}
+
+async function persistUploadedVideo(input: NonNullable<CreateAnalysisInput["uploadedVideo"]>) {
+  const fileName = input.fileName.trim();
+  const extension = extname(fileName).toLowerCase();
+
+  if (!fileName || !ALLOWED_UPLOAD_EXTENSIONS.has(extension)) {
+    throw new ValidationError("Please upload an MP4 video file.");
+  }
+
+  if (
+    input.mimeType &&
+    !ALLOWED_UPLOAD_MIME_TYPES.has(input.mimeType.toLowerCase())
+  ) {
+    throw new ValidationError("Only MP4 video uploads are supported right now.");
+  }
+
+  if (!Number.isFinite(input.fileSizeBytes) || input.fileSizeBytes <= 0) {
+    throw new ValidationError("The uploaded video file is empty.");
+  }
+
+  const uploadRoot = getUploadedVideoTempRoot();
+  await mkdir(uploadRoot, { recursive: true });
+  const workingDirectory = await mkdtemp(join(uploadRoot, "video-upload-"));
+  const filePath = join(workingDirectory, `source${extension || ".mp4"}`);
+
+  await writeFile(filePath, Buffer.from(input.buffer));
+
+  return extractUploadedVideoMetadata({
+    fileName,
+    mimeType: input.mimeType,
+    fileSizeBytes: input.fileSizeBytes,
+    filePath,
+  });
 }
 
 function buildProcessingErrorMessage(
@@ -177,8 +225,9 @@ export async function
 createAnalysisTask(
   input: CreateAnalysisInput & { userId: string },
 ): Promise<AnalysisPublicTask> {
-  const validUrl = assertValidVideoUrl(input.videoUrl);
-  const video = await extractVideoMetadata(validUrl.toString());
+  const video = input.uploadedVideo
+    ? await persistUploadedVideo(input.uploadedVideo)
+    : await extractVideoMetadata(assertValidVideoUrl(input.videoUrl ?? "").toString());
   const now = new Date().toISOString();
 
   const task: AnalysisTask = {
