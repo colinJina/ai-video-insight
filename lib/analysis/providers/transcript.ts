@@ -235,6 +235,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
   readonly kind = "remote" as const;
 
   private static readonly MAX_PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;
+  private static readonly UNKNOWN_DURATION_TIMEOUT_MS = 10 * 60 * 1000;
   private static readonly POLL_REQUEST_TIMEOUT_MS = 30 * 1000;
 
   private readonly transcriptEndpoint: string;
@@ -265,7 +266,10 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
       !Number.isFinite(video.durationSeconds) ||
       video.durationSeconds <= 0
     ) {
-      return this.timeoutMs;
+      return Math.max(
+        this.timeoutMs,
+        AssemblyAiTranscriptProvider.UNKNOWN_DURATION_TIMEOUT_MS,
+      );
     }
 
     const durationScaledTimeoutMs = Math.ceil(video.durationSeconds * 1000 * 0.75) + 60_000;

@@ -16,6 +16,7 @@ import {
   toHostLabel,
   trimText,
 } from "@/lib/analysis/utils";
+import { probeVideoMetadataWithYtDlp } from "@/lib/analysis/yt-dlp";
 
 const DIRECT_VIDEO_PROBE_RANGE_BYTES = 1024 * 1024;
 
@@ -403,6 +404,15 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
   const isDirectVideo = isDirectMediaUrl(url);
   const fallbackTitle = prettifyTitleFromUrl(url, provider);
   const remoteMetadata = isDirectVideo ? null : await fetchRemotePageMetadata(url);
+  const needsYtDlpMetadata =
+    !isDirectVideo &&
+    (!remoteMetadata ||
+      remoteMetadata.durationSeconds === null ||
+      !remoteMetadata.title ||
+      !remoteMetadata.posterUrl);
+  const ytDlpMetadata = needsYtDlpMetadata
+    ? await probeVideoMetadataWithYtDlp(normalizedUrl)
+    : null;
   const derivedPlayableUrl =
     normalizedUrl && isDirectVideo
       ? normalizedUrl
@@ -411,7 +421,7 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
         : null;
   const durationSeconds = isDirectVideo
     ? await probeDirectVideoDuration(url)
-    : (remoteMetadata?.durationSeconds ?? null);
+    : (remoteMetadata?.durationSeconds ?? ytDlpMetadata?.durationSeconds ?? null);
 
   return {
     originalUrl: inputUrl.trim(),
@@ -419,11 +429,12 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
     host,
     provider,
     inputKind: "url",
-    title: remoteMetadata?.title ?? fallbackTitle,
+    title: remoteMetadata?.title ?? ytDlpMetadata?.title ?? fallbackTitle,
     description:
       remoteMetadata?.description ??
+      ytDlpMetadata?.description ??
       "服务端会基于这条视频链接抽取基础信息、准备转写文本，并生成结构化摘要。",
-    posterUrl: remoteMetadata?.posterUrl ?? null,
+    posterUrl: remoteMetadata?.posterUrl ?? ytDlpMetadata?.posterUrl ?? null,
     playableUrl: derivedPlayableUrl,
     durationSeconds,
     fileName: null,

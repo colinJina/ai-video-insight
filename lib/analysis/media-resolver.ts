@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { ExternalServiceError } from "@/lib/analysis/errors";
 import type { VideoSource } from "@/lib/analysis/types";
 import { fetchWithTimeout, isDirectMediaUrl, normalizeWhitespace } from "@/lib/analysis/utils";
+import { getYtDlpBinary } from "@/lib/analysis/yt-dlp";
 
 const DEFAULT_UPLOAD_TIMEOUT_MS = Number(
   process.env.TRANSCRIPT_UPLOAD_TIMEOUT_MS ?? 5 * 60 * 1000,
@@ -23,23 +24,6 @@ type PreparedTranscriptMedia = {
   audioUrl: string;
   cleanup: () => Promise<void>;
 };
-
-function getDefaultYtDlpBinary() {
-  const explicit = process.env.YT_DLP_BIN?.trim();
-  if (explicit) {
-    return explicit;
-  }
-
-  if (process.env.VERCEL === "1") {
-    return "bin/yt-dlp";
-  }
-
-  if (process.platform === "win32") {
-    return ".tools/yt-dlp.exe";
-  }
-
-  return "yt-dlp";
-}
 
 function noopCleanup() {
   return Promise.resolve();
@@ -80,7 +64,7 @@ async function runYtDlp(video: VideoSource) {
     join(transcriptTempRoot, "video-analyzer-"),
   );
   const outputTemplate = join(workingDirectory, "source.%(ext)s");
-  const command = getDefaultYtDlpBinary();
+  const command = getYtDlpBinary();
   const args = getYtDlpArgs(video.normalizedUrl, outputTemplate);
 
   try {
