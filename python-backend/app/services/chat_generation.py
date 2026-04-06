@@ -36,6 +36,7 @@ class ChatResponseGenerator:
             "Python backend is connected. "
             f'Received: "{context.latest_user_message}". '
             f"Recent turns available: {context.conversation_turn_count}. "
+            f"Compressed conversation history: {'yes' if context.conversation_was_compressed else 'no'}. "
             f"{analysis_status} "
             f"{memory_status} "
             f"{memory_hits_status} "

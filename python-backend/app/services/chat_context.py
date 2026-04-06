@@ -9,26 +9,29 @@ class ChatContextBuilder:
         chat_input: SanitizedChatInput,
         memory_items: list[ChatMemoryItem],
         memory_hits: list[str],
+        retained_recent_messages: list[ChatMessage],
+        conversation_summary: str | None,
+        conversation_was_compressed: bool,
     ) -> ChatContext:
-        recent_messages = chat_input.recent_messages[-6:]
-        conversation_turn_count = len(recent_messages)
-
-        conversation_summary = self._build_summary(
+        conversation_turn_count = len(chat_input.recent_messages)
+        summary_text = conversation_summary or self._build_summary(
             latest_user_message=chat_input.message,
             conversation_turn_count=conversation_turn_count,
         )
         assembled_context = self._assemble_context(
-            recent_messages=recent_messages,
+            recent_messages=retained_recent_messages,
             analysis_summary=chat_input.analysis_summary,
             transcript_excerpt=chat_input.transcript_excerpt,
             outline=chat_input.outline,
             key_points=chat_input.key_points,
             memory_items=memory_items,
+            conversation_summary=summary_text,
         )
 
         return ChatContext(
             latest_user_message=chat_input.message,
-            recent_messages=recent_messages,
+            recent_messages=chat_input.recent_messages,
+            retained_recent_messages=retained_recent_messages,
             user_id=chat_input.user_id,
             analysis_id=chat_input.analysis_id,
             analysis_summary=chat_input.analysis_summary,
@@ -38,7 +41,8 @@ class ChatContextBuilder:
             memory_items=memory_items,
             memory_hits=memory_hits,
             conversation_turn_count=conversation_turn_count,
-            conversation_summary=conversation_summary,
+            conversation_was_compressed=conversation_was_compressed,
+            conversation_summary=summary_text,
             assembled_context=assembled_context,
         )
 
@@ -58,6 +62,7 @@ class ChatContextBuilder:
         outline: list,
         key_points: list[str],
         memory_items: list[ChatMemoryItem],
+        conversation_summary: str | None,
     ) -> str:
         sections: list[str] = []
 
@@ -66,6 +71,9 @@ class ChatContextBuilder:
                 f"- {message.role}: {message.content}" for message in recent_messages
             )
             sections.append(f"Recent messages:\n{rendered_messages}")
+
+        if conversation_summary:
+            sections.append(f"Conversation summary:\n{conversation_summary}")
 
         if analysis_summary:
             sections.append(f"Analysis summary:\n{analysis_summary}")

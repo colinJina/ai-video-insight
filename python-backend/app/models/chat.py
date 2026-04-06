@@ -101,6 +101,7 @@ class SanitizedChatInput(ChatModel):
 class ChatContext(ChatModel):
     latest_user_message: str = Field(min_length=1)
     recent_messages: list[ChatMessage] = Field(default_factory=list)
+    retained_recent_messages: list[ChatMessage] = Field(default_factory=list)
     user_id: str | None = None
     analysis_id: str | None = None
     analysis_summary: str | None = None
@@ -110,5 +111,6 @@ class ChatContext(ChatModel):
     memory_items: list[ChatMemoryItem] = Field(default_factory=list)
     memory_hits: list[str] = Field(default_factory=list)
     conversation_turn_count: int = Field(ge=0, default=0)
+    conversation_was_compressed: bool = False
     conversation_summary: str | None = None
     assembled_context: str = Field(default="")
