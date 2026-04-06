@@ -6,7 +6,7 @@ import {
   getPublicErrorMessage,
   ValidationError,
 } from "@/lib/analysis/errors";
-import { createAnalysisTask } from "@/lib/analysis/service";
+import { createAnalysisTask } from "@/lib/analysis/services/tasks";
 import { requireAppApiSession } from "@/lib/auth/guards";
 import type { CreateAnalysisInput } from "@/lib/analysis/types";
 

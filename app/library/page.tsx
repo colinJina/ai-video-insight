@@ -4,7 +4,7 @@ import AppShell from "@/components/app/AppShell";
 import PageHeader from "@/components/app/PageHeader";
 import AnalysisGrid from "@/components/library/AnalysisGrid";
 import LibrarySearchForm from "@/components/library/LibrarySearchForm";
-import { listAnalysisTasksForUser } from "@/lib/analysis/service";
+import { listAnalysisTasksForUser } from "@/lib/analysis/services/tasks";
 import { requireAppSession } from "@/lib/auth/guards";
 
 function normalizeQuery(query?: string | string[]) {

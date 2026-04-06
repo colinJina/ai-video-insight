@@ -5,7 +5,7 @@ import {
   getErrorStatusCode,
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
-import { chatOnAnalysis } from "@/lib/analysis/service";
+import { chatOnAnalysis } from "@/lib/analysis/services/chat";
 import type { ChatInput } from "@/lib/analysis/types";
 
 export const runtime = "nodejs";

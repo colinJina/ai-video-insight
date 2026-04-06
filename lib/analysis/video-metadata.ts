@@ -1,4 +1,4 @@
-import { open } from "node:fs/promises";
+﻿import { open } from "node:fs/promises";
 import { extname } from "node:path";
 
 import type { VideoSource } from "@/lib/analysis/types";
@@ -433,7 +433,7 @@ export async function extractVideoMetadata(inputUrl: string): Promise<VideoSourc
     description:
       remoteMetadata?.description ??
       ytDlpMetadata?.description ??
-      "服务端会基于这条视频链接抽取基础信息、准备转写文本，并生成结构化摘要。",
+      "The server will inspect this video URL, prepare transcript context, and generate a structured summary.",
     posterUrl: remoteMetadata?.posterUrl ?? ytDlpMetadata?.posterUrl ?? null,
     playableUrl: derivedPlayableUrl,
     durationSeconds,
@@ -476,3 +476,5 @@ export async function extractUploadedVideoMetadata(input: {
     localFilePath: input.filePath,
   };
 }
+
+

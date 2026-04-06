@@ -5,7 +5,7 @@ import {
   getErrorStatusCode,
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
-import { getAnalysisTask } from "@/lib/analysis/service";
+import { getAnalysisTask } from "@/lib/analysis/services/tasks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

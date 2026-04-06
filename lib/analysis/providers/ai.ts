@@ -80,18 +80,18 @@ class MockAiProvider implements AIProvider {
     const lead = input.analysis.outline[0];
     const related = input.analysis.outline[1] ?? input.analysis.outline[0];
     const leadText = lead
-      ? `${lead.time ? `${lead.time} 的` : ""}“${lead.text}”`
+      ? `${lead.time ? `${lead.time}: ` : ""}"${lead.text}"`
       : "";
     const relatedText = related
       ? related.time
-        ? `${related.time} 这一段`
-        : "相关片段"
+        ? `${related.time} in the outline`
+        : "a nearby section from the outline"
       : "";
 
     return trimText(
-      `基于当前转写，我的判断是：${input.analysis.summary} ${
-        lead ? `如果你想快速回看，建议先看 ${leadText}。` : ""
-      } ${related ? `补充理解时，可以再结合 ${relatedText}。` : ""}`,
+      `Based on the current transcript and summary, the clearest answer is: ${input.analysis.summary} ${
+        lead ? `If you want a quick rewatch point, start with ${leadText}.` : ""
+      } ${related ? `For extra context, review ${relatedText} as well.` : ""}`,
       320,
     );
   }
@@ -139,7 +139,7 @@ class HttpAiProvider implements AIProvider {
     try {
       body = rawBody ? JSON.parse(rawBody) : null;
     } catch {
-      throw new ExternalServiceError("AI 服务返回了无法解析的响应。");
+      throw new ExternalServiceError("The AI service returned a response that could not be parsed.");
     }
 
     if (!response.ok) {
@@ -148,7 +148,7 @@ class HttpAiProvider implements AIProvider {
         isRecord(body.error) &&
         typeof body.error.message === "string"
           ? body.error.message
-          : `AI 服务返回了 ${response.status} 错误。`;
+          : `The AI service returned status ${response.status}.`;
 
       throw new ExternalServiceError(message);
     }
@@ -174,7 +174,7 @@ class HttpAiProvider implements AIProvider {
       { role: "user", content: buildChatUserPrompt(input) },
     ]);
 
-    return raw.trim() || "我暂时没拿到足够稳定的回答，请换个问法再试一次。";
+    return raw.trim() || "I could not produce a stable answer from the current context. Please try rephrasing the question.";
   }
 }
 
@@ -195,7 +195,7 @@ export function createAiProvider(): AIProvider {
 
   if (explicitProvider === "http") {
     throw new ExternalServiceError(
-      "AI_PROVIDER=http 时必须同时配置 AI_BASE_URL、AI_API_KEY 和 AI_MODEL。",
+      "AI_PROVIDER=http requires AI_BASE_URL, AI_API_KEY, and AI_MODEL to be configured together.",
       true,
     );
   }

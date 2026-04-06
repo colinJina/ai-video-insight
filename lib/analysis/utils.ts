@@ -31,7 +31,7 @@ export function trimText(value: string, maxLength: number) {
     return normalized;
   }
 
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
 }
 
 export function decodeHtmlEntities(value: string) {
@@ -44,7 +44,7 @@ export function decodeHtmlEntities(value: string) {
 export function assertValidVideoUrl(value: string) {
   const input = value.trim();
   if (!input) {
-    throw new ValidationError("请输入视频链接。");
+    throw new ValidationError("Please enter a video URL.");
   }
 
   let url: URL;
@@ -52,11 +52,11 @@ export function assertValidVideoUrl(value: string) {
   try {
     url = new URL(input);
   } catch {
-    throw new ValidationError("请输入合法的 HTTP 或 HTTPS 视频链接。");
+    throw new ValidationError("Please enter a valid HTTP or HTTPS video URL.");
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new ValidationError("目前仅支持 HTTP 或 HTTPS 视频链接。");
+    throw new ValidationError("Only HTTP and HTTPS video URLs are supported right now.");
   }
 
   return url;
@@ -107,16 +107,16 @@ export function prettifyTitleFromUrl(url: URL, provider: VideoProvider) {
   if (provider === "youtube") {
     const id =
       url.searchParams.get("v") ?? url.pathname.split("/").filter(Boolean).pop();
-    return id ? `YouTube 视频 ${id.slice(0, 8)}` : "YouTube 视频";
+    return id ? `YouTube video ${id.slice(0, 8)}` : "YouTube video";
   }
 
   if (provider === "vimeo") {
     const id = url.pathname.split("/").filter(Boolean).pop();
-    return id ? `Vimeo 视频 ${id}` : "Vimeo 视频";
+    return id ? `Vimeo video ${id}` : "Vimeo video";
   }
 
   if (provider === "bilibili") {
-    return "哔哩哔哩视频";
+    return "Bilibili video";
   }
 
   const lastSegment = url.pathname.split("/").filter(Boolean).pop();
@@ -131,7 +131,7 @@ export function prettifyTitleFromUrl(url: URL, provider: VideoProvider) {
     }
   }
 
-  return `${toHostLabel(url.hostname)} 视频`;
+  return `${toHostLabel(url.hostname)} video`;
 }
 
 export function formatTimestamp(totalSeconds: number | null | undefined) {
@@ -233,7 +233,7 @@ export async function fetchWithTimeout(
       error instanceof Error &&
       (error.name === "AbortError" || error.name === "TimeoutError")
     ) {
-      throw new TimeoutError("请求超时，请稍后重试。");
+      throw new TimeoutError("The request timed out. Please try again.");
     }
 
     throw error;

@@ -5,7 +5,7 @@ import {
   getErrorStatusCode,
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
-import { setAnalysisArchived } from "@/lib/analysis/service";
+import { setAnalysisArchived } from "@/lib/analysis/services/tasks";
 import { requireAppApiSession } from "@/lib/auth/guards";
 
 type ArchiveRouteContext = {

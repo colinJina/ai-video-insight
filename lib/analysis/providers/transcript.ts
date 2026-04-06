@@ -29,27 +29,27 @@ function buildMockTranscriptSegments(video: VideoSource): TranscriptSegment[] {
     {
       startSeconds: null,
       endSeconds: null,
-      text: `这段内容围绕“${title}”展开，先说明主题背景、观看价值以及最值得关注的核心问题。`,
+      text: `This segment introduces "${title}", explains the background, and frames the most important question to watch for.`,
     },
     {
       startSeconds: null,
       endSeconds: null,
-      text: "随后视频把问题拆成几个层次，先讲现状与常见误区，再解释为什么传统做法在效率和协同上会遇到瓶颈。",
+      text: "The next section breaks the topic into smaller layers, compares the current state with common mistakes, and explains where older approaches start to fail.",
     },
     {
       startSeconds: null,
       endSeconds: null,
-      text: "中段给出了更系统的方法论，包括如何定义目标、组织信息，以及怎样把输入转成可执行的输出。",
+      text: "The middle of the video lays out a more systematic method, including how to define the goal, organize inputs, and turn them into concrete outputs.",
     },
     {
       startSeconds: null,
       endSeconds: null,
-      text: "接着通过案例或场景推演，展示方案落地后的变化，并强调哪些指标最能帮助判断方案是否有效。",
+      text: "A concrete example or scenario then shows what changes after the method is applied and which signals matter when judging whether it works.",
     },
     {
       startSeconds: null,
       endSeconds: null,
-      text: "结尾回到决策层视角，提醒观众在推进这件事时既要关注效率，也要关注风险、边界和后续迭代空间。",
+      text: "The ending shifts back to decision making and reminds the viewer to balance speed with risk, constraints, and room for iteration.",
     },
   ];
 }
@@ -67,7 +67,7 @@ class MockTranscriptProvider implements TranscriptProvider {
 
     return {
       source: "mock",
-      language: "zh-CN",
+      language: "en",
       fullText: segments.map((segment) => segment.text).join(" "),
       segments,
     };
@@ -121,7 +121,7 @@ function normalizeRemoteTranscriptPayload(payload: unknown): RemoteTranscriptRes
   const root = isRecord(payload) && isRecord(payload.transcript) ? payload.transcript : payload;
 
   if (!isRecord(root)) {
-    throw new ExternalServiceError("Transcript 服务返回了无法解析的响应。");
+    throw new ExternalServiceError("The transcript service returned a response that could not be parsed.");
   }
 
   const rawSegments = Array.isArray(root.segments)
@@ -136,7 +136,7 @@ function normalizeRemoteTranscriptPayload(payload: unknown): RemoteTranscriptRes
     .filter((segment): segment is TranscriptSegment => segment !== null);
 
   if (segments.length === 0) {
-    throw new ExternalServiceError("Transcript 服务没有返回可用的分段结果。");
+    throw new ExternalServiceError("The transcript service did not return any usable transcript segments.");
   }
 
   const hasRealTimeline = segments.some(
@@ -145,7 +145,7 @@ function normalizeRemoteTranscriptPayload(payload: unknown): RemoteTranscriptRes
   );
 
   if (!hasRealTimeline) {
-    throw new ExternalServiceError("Transcript 服务返回了文本，但没有返回可用的时间戳。");
+    throw new ExternalServiceError("The transcript service returned text but no usable timestamps.");
   }
 
   const fullText =
@@ -171,7 +171,7 @@ function millisecondsToSeconds(value: unknown) {
 
 function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse {
   if (!isRecord(payload)) {
-    throw new ExternalServiceError("AssemblyAI 返回了无法解析的响应。");
+    throw new ExternalServiceError("AssemblyAI returned a response that could not be parsed.");
   }
 
   const utterances = Array.isArray(payload.utterances) ? payload.utterances : [];
@@ -197,7 +197,7 @@ function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse 
     .filter((segment): segment is TranscriptSegment => segment !== null);
 
   if (segments.length === 0) {
-    throw new ExternalServiceError("AssemblyAI 没有返回可用的带时间戳分段。");
+    throw new ExternalServiceError("AssemblyAI did not return any usable timestamped segments.");
   }
 
   const hasRealTimeline = segments.some(
@@ -206,7 +206,7 @@ function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse 
   );
 
   if (!hasRealTimeline) {
-    throw new ExternalServiceError("AssemblyAI 返回了文本，但没有可用的时间戳。");
+    throw new ExternalServiceError("AssemblyAI returned text but no usable timestamps.");
   }
 
   const fullText =
@@ -317,7 +317,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
     try {
       body = rawBody ? JSON.parse(rawBody) : null;
     } catch {
-      throw new ExternalServiceError("AssemblyAI 返回了无法解析的响应。");
+      throw new ExternalServiceError("AssemblyAI returned a response that could not be parsed.");
     }
 
     if (!response.ok) {
@@ -328,13 +328,13 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
           ? body.error.message
           : isRecord(body) && typeof body.error === "string"
             ? body.error
-            : `AssemblyAI 提交任务失败，状态码 ${response.status}。`;
+            : `AssemblyAI submission failed with status ${response.status}.`;
 
       throw new ExternalServiceError(message, true);
     }
 
     if (!isRecord(body) || typeof body.id !== "string" || !body.id) {
-      throw new ExternalServiceError("AssemblyAI 没有返回有效的 transcript id。");
+      throw new ExternalServiceError("AssemblyAI did not return a valid transcript id.");
     }
 
     return body.id;
@@ -365,7 +365,7 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
       try {
         body = rawBody ? JSON.parse(rawBody) : null;
       } catch {
-        throw new ExternalServiceError("AssemblyAI 返回了无法解析的轮询响应。");
+        throw new ExternalServiceError("AssemblyAI returned a polling response that could not be parsed.");
       }
 
       if (!response.ok) {
@@ -376,13 +376,13 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
             ? body.error.message
             : isRecord(body) && typeof body.error === "string"
               ? body.error
-              : `AssemblyAI 轮询失败，状态码 ${response.status}。`;
+              : `AssemblyAI polling failed with status ${response.status}.`;
 
         throw new ExternalServiceError(message, true);
       }
 
       if (!isRecord(body) || typeof body.status !== "string") {
-        throw new ExternalServiceError("AssemblyAI 返回了缺少状态字段的响应。");
+        throw new ExternalServiceError("AssemblyAI returned a response without a status field.");
       }
 
       if (body.status === "completed") {
@@ -391,14 +391,14 @@ class AssemblyAiTranscriptProvider implements TranscriptProvider {
 
       if (body.status === "error") {
         const errorMessage =
-          typeof body.error === "string" ? body.error : "AssemblyAI 转写任务失败。";
+          typeof body.error === "string" ? body.error : "AssemblyAI transcript generation failed.";
         throw new ExternalServiceError(errorMessage, true);
       }
 
       await sleep(this.pollIntervalMs);
     }
 
-    throw new ExternalServiceError("AssemblyAI 转写超时，请稍后重试。", true);
+    throw new ExternalServiceError("AssemblyAI transcript generation timed out. Please try again later.", true);
   }
 
   async getTranscript({ video }: { video: VideoSource }): Promise<TranscriptData> {
@@ -484,7 +484,7 @@ class GenericRemoteTranscriptProvider implements TranscriptProvider {
       try {
         body = rawBody ? JSON.parse(rawBody) : null;
       } catch {
-        throw new ExternalServiceError("Transcript 服务返回了无法解析的响应。");
+        throw new ExternalServiceError("The transcript service returned a response that could not be parsed.");
       }
 
       if (!response.ok) {
@@ -493,7 +493,7 @@ class GenericRemoteTranscriptProvider implements TranscriptProvider {
           isRecord(body.error) &&
           typeof body.error.message === "string"
             ? body.error.message
-            : `Transcript 服务返回了 ${response.status} 错误。`;
+            : `The transcript service returned status ${response.status}.`;
 
         throw new ExternalServiceError(message, true);
       }
@@ -570,14 +570,14 @@ export function createTranscriptProvider(): TranscriptProvider {
 
   if (explicitProvider === "assemblyai") {
     throw new ExternalServiceError(
-      "TRANSCRIPT_PROVIDER=assemblyai 时必须配置 TRANSCRIPT_API_KEY 或 ASSEMBLYAI_API_KEY。",
+      "TRANSCRIPT_PROVIDER=assemblyai requires TRANSCRIPT_API_KEY or ASSEMBLYAI_API_KEY to be configured.",
       true,
     );
   }
 
   if (explicitProvider === "remote") {
     throw new ExternalServiceError(
-      "TRANSCRIPT_PROVIDER=remote 时必须配置可用的 transcript 服务密钥；若走通用 remote，还需要 TRANSCRIPT_API_BASE_URL。",
+      "TRANSCRIPT_PROVIDER=remote requires a transcript service API key. Generic remote mode also requires TRANSCRIPT_API_BASE_URL.",
       true,
     );
   }

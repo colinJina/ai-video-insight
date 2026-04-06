@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import AppShell from "@/components/app/AppShell";
 import StatusBadge from "@/components/app/StatusBadge";
-import { getAnalysisTask, getAnalysisTaskForUser } from "@/lib/analysis/service";
+import { getAnalysisTask, getAnalysisTaskForUser } from "@/lib/analysis/services/tasks";
 import { getOptionalAppSession } from "@/lib/auth/session";
 import { isUploadedVideoSource } from "@/lib/analysis/utils";
 
