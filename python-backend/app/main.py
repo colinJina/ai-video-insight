@@ -3,12 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.exceptions import (
+    create_request_logging_middleware,
+    install_exception_handlers,
+)
+from app.core.logging import configure_logging, get_logger
 
 settings = get_settings()
+configure_logging(settings)
+logger = get_logger("app.main")
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -20,6 +27,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(create_request_logging_middleware(logger))
+install_exception_handlers(app, logger)
 
 app.include_router(api_router, prefix="/api")
 
@@ -29,4 +38,6 @@ def root() -> dict[str, str]:
     return {
         "message": "AI Video Insight Python backend is running.",
         "docs": "/docs",
+        "version": settings.app_version,
+        "chat_provider": settings.chat_provider,
     }

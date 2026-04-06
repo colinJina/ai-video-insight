@@ -5,7 +5,10 @@ class ChatResponseGenerator:
     """Generates a deterministic placeholder answer from the prepared context."""
 
     def generate(
-        self, context: ChatContext, memory_items: list[ChatMemoryItem]
+        self,
+        context: ChatContext,
+        memory_items: list[ChatMemoryItem],
+        model_answer: str | None = None,
     ) -> ChatResponse:
         memory_status = (
             f"Memory items attached: {len(memory_items)}."
@@ -24,14 +27,14 @@ class ChatResponseGenerator:
             else "Analysis context not attached yet."
         )
 
-        answer = (
+        answer = model_answer or (
             "Python backend is connected. "
             f'Received: "{context.latest_user_message}". '
             f"Recent turns available: {context.conversation_turn_count}. "
             f"{analysis_status} "
             f"{memory_status} "
             f"Unified context length: {len(context.assembled_context)} characters. "
-            "This endpoint is ready for memory, retrieval, and PDF workflows."
+            "This endpoint is ready for memory, retrieval, PDF workflows, and future LangChain integration."
         )
 
         return ChatResponse(
