@@ -1,24 +1,41 @@
 from io import BytesIO
 from itertools import count
 from re import sub
+from unicodedata import east_asian_width
 
 from app.models.report import PdfReportRequest
 
 
 class PdfReportService:
-    """Generates a minimal PDF report from structured video analysis content."""
+    """Generates a PDF report from structured video analysis content."""
 
     page_margin = 50
     line_height = 16
     section_gap = 12
+    fallback_page_width = 612
+    fallback_page_height = 792
+    fallback_font_size = 11
+    fallback_title_font_size = 16
+    fallback_section_font_size = 12
+    fallback_leading = 16
 
     def generate(self, request: PdfReportRequest) -> tuple[bytes, str]:
         try:
-            from reportlab.lib.pagesizes import LETTER
-            from reportlab.lib.utils import simpleSplit
-            from reportlab.pdfgen import canvas
+            return self._generate_with_reportlab(request)
         except ImportError:
             return self._generate_without_reportlab(request)
+
+    def _generate_with_reportlab(self, request: PdfReportRequest) -> tuple[bytes, str]:
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        from reportlab.pdfgen import canvas
+
+        font_name = "STSong-Light"
+        try:
+            pdfmetrics.getFont(font_name)
+        except KeyError:
+            pdfmetrics.registerFont(UnicodeCIDFont(font_name))
 
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=LETTER)
@@ -33,7 +50,7 @@ class PdfReportService:
                 pdf.showPage()
                 y_position = page_height - self.page_margin
 
-        def draw_lines(lines: list[str], font_name: str = "Helvetica", font_size: int = 11):
+        def draw_lines(lines: list[str], font_size: int = 11) -> None:
             nonlocal y_position
             pdf.setFont(font_name, font_size)
             for line in lines:
@@ -41,12 +58,24 @@ class PdfReportService:
                 pdf.drawString(self.page_margin, y_position, line)
                 y_position -= self.line_height
 
-        def wrap_text(text: str, font_name: str = "Helvetica", font_size: int = 11) -> list[str]:
+        def wrap_text(
+            text: str,
+            *,
+            font_size: int = 11,
+            first_prefix: str = "",
+            continuation_prefix: str = "",
+        ) -> list[str]:
             normalized = self._normalize_text(text)
             if not normalized:
                 return []
 
-            return simpleSplit(normalized, font_name, font_size, text_width)
+            return self._wrap_text(
+                normalized,
+                max_width=text_width,
+                width_fn=lambda value: pdfmetrics.stringWidth(value, font_name, font_size),
+                first_prefix=first_prefix,
+                continuation_prefix=continuation_prefix,
+            )
 
         def draw_section(title: str, body_lines: list[str]) -> None:
             nonlocal y_position
@@ -54,21 +83,27 @@ class PdfReportService:
                 return
 
             ensure_space(2)
-            pdf.setFont("Helvetica-Bold", 12)
+            pdf.setFont(font_name, 12)
             pdf.drawString(self.page_margin, y_position, title)
             y_position -= self.line_height
             draw_lines(body_lines)
             y_position -= self.section_gap
 
-        draw_lines(
-            wrap_text(request.title, font_name="Helvetica-Bold", font_size=16),
-            font_name="Helvetica-Bold",
-            font_size=16,
-        )
+        draw_lines(wrap_text(request.title, font_size=16), font_size=16)
         y_position -= self.section_gap
 
         draw_section("Summary", wrap_text(request.summary))
-        draw_section("Key Points", self._build_bullet_lines(request.key_points, wrap_text))
+        draw_section(
+            "Key Points",
+            self._build_bullet_lines(
+                request.key_points,
+                lambda value, prefix="", continuation_prefix="": wrap_text(
+                    value,
+                    first_prefix=prefix,
+                    continuation_prefix=continuation_prefix,
+                ),
+            ),
+        )
         draw_section("Outline", self._build_outline_lines(request, wrap_text))
         draw_section("Chat History", self._build_chat_lines(request, wrap_text))
 
@@ -85,12 +120,10 @@ class PdfReportService:
         lines: list[str] = []
 
         for point in key_points:
-            wrapped = wrap_text(point)
+            wrapped = wrap_text(point, prefix="- ", continuation_prefix="  ")
             if not wrapped:
                 continue
-
-            lines.append(f"- {wrapped[0]}")
-            lines.extend(f"  {line}" for line in wrapped[1:])
+            lines.extend(wrapped)
 
         return lines
 
@@ -99,10 +132,12 @@ class PdfReportService:
 
         for item in request.outline:
             prefix = f"[{item.time}] " if item.time else ""
-            wrapped = wrap_text(f"{prefix}{item.text}")
+            wrapped = wrap_text(
+                f"{prefix}{item.text}",
+                continuation_prefix=" " * len(prefix),
+            )
             if not wrapped:
                 continue
-
             lines.extend(wrapped)
 
         return lines
@@ -111,11 +146,13 @@ class PdfReportService:
         lines: list[str] = []
 
         for message in request.chat_history:
-            role = message.role.capitalize()
-            wrapped = wrap_text(f"{role}: {message.content}")
+            role = f"{message.role.capitalize()}: "
+            wrapped = wrap_text(
+                f"{role}{message.content}",
+                continuation_prefix=" " * len(role),
+            )
             if not wrapped:
                 continue
-
             lines.extend(wrapped)
 
         return lines
@@ -129,7 +166,7 @@ class PdfReportService:
         return " ".join(value.split())
 
     def _build_fallback_pages(self, request: PdfReportRequest) -> list[list[str]]:
-        max_chars_per_line = 88
+        max_units_per_line = 64
         max_lines_per_page = 44
         pages: list[list[str]] = [[]]
 
@@ -140,27 +177,24 @@ class PdfReportService:
                 current_page = pages[-1]
             current_page.append(line)
 
-        def add_wrapped(text: str, prefix: str = "") -> None:
+        def add_wrapped(
+            text: str,
+            *,
+            prefix: str = "",
+            continuation_prefix: str = "",
+        ) -> None:
             normalized = self._normalize_text(text)
             if not normalized:
                 return
 
-            words = normalized.split(" ")
-            first_line_prefix = prefix
-            continuation_prefix = " " * len(prefix)
-            current = first_line_prefix
-
-            for word in words:
-                separator = "" if current.endswith((" ", "-", "•")) or current == first_line_prefix else " "
-                candidate = f"{current}{separator}{word}"
-                if len(candidate) <= max_chars_per_line:
-                    current = candidate
-                    continue
-
-                add_line(current.rstrip())
-                current = f"{continuation_prefix}{word}"
-
-            add_line(current.rstrip())
+            for line in self._wrap_text(
+                normalized,
+                max_width=max_units_per_line,
+                width_fn=self._display_width,
+                first_prefix=prefix,
+                continuation_prefix=continuation_prefix,
+            ):
+                add_line(line)
 
         add_wrapped(request.title)
         add_line()
@@ -184,23 +218,97 @@ class PdfReportService:
                 continue
 
             add_line(title)
-            for index, entry in enumerate(filtered_entries):
-                prefix = "- " if title == "Key Points" else ""
-                add_wrapped(entry, prefix=prefix)
-                if title != "Summary" and index < len(filtered_entries) - 1:
-                    add_line()
+            for entry in filtered_entries:
+                if title == "Key Points":
+                    add_wrapped(entry, prefix="- ", continuation_prefix="  ")
+                else:
+                    add_wrapped(entry)
             add_line()
 
         return [page for page in pages if page]
 
-    def _build_basic_pdf(self, pages: list[list[str]]) -> bytes:
-        page_width = 612
-        page_height = 792
-        text_start_x = 50
-        text_start_y = 742
-        font_size = 11
-        leading = 16
+    def _wrap_text(
+        self,
+        text: str,
+        *,
+        max_width: float,
+        width_fn,
+        first_prefix: str = "",
+        continuation_prefix: str = "",
+    ) -> list[str]:
+        tokens = self._tokenize_text(text)
+        if not tokens:
+            return []
 
+        lines: list[str] = []
+        current = first_prefix
+        current_prefix = first_prefix
+        next_prefix = continuation_prefix
+
+        for token in tokens:
+            candidate = f"{current}{token}"
+            if current == current_prefix and token == " ":
+                continue
+
+            if width_fn(candidate) <= max_width or current == current_prefix:
+                current = candidate
+                if width_fn(current) <= max_width:
+                    continue
+
+            if current.strip():
+                lines.append(current.rstrip())
+
+            stripped_token = token.lstrip()
+            current = f"{next_prefix}{stripped_token}"
+            current_prefix = next_prefix
+
+        if current.strip():
+            lines.append(current.rstrip())
+
+        return lines
+
+    def _tokenize_text(self, text: str) -> list[str]:
+        tokens: list[str] = []
+        current_ascii = ""
+
+        def flush_ascii() -> None:
+            nonlocal current_ascii
+            if current_ascii:
+                tokens.append(current_ascii)
+                current_ascii = ""
+
+        for char in text:
+            if char == " ":
+                flush_ascii()
+                if not tokens or tokens[-1] != " ":
+                    tokens.append(" ")
+                continue
+
+            if char.isascii() and not self._is_cjk(char):
+                current_ascii += char
+                continue
+
+            flush_ascii()
+            tokens.append(char)
+
+        flush_ascii()
+        return tokens
+
+    def _display_width(self, value: str) -> int:
+        width = 0
+        for char in value:
+            if char == "\n":
+                continue
+            width += 2 if self._is_wide(char) else 1
+        return width
+
+    def _is_wide(self, char: str) -> bool:
+        return east_asian_width(char) in {"F", "W"}
+
+    def _is_cjk(self, char: str) -> bool:
+        return self._is_wide(char) or east_asian_width(char) == "A"
+
+    def _build_basic_pdf(self, pages: list[list[str]]) -> bytes:
         objects: list[bytes] = []
         object_numbers = count(1)
 
@@ -211,20 +319,36 @@ class PdfReportService:
             )
             return object_number
 
-        font_object = add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+        font_descriptor_id = add_object(
+            (
+                b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 "
+                b"/FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 "
+                b"/Descent -120 /CapHeight 880 /StemV 80 /MissingWidth 500 >>"
+            )
+        )
+        descendant_font_id = add_object(
+            (
+                b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light "
+                b"/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> "
+                b"/FontDescriptor "
+                + str(font_descriptor_id).encode("ascii")
+                + b" 0 R /DW 1000 >>"
+            )
+        )
+        font_object_id = add_object(
+            (
+                b"<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light "
+                b"/Encoding /UniGB-UCS2-H /DescendantFonts [ "
+                + str(descendant_font_id).encode("ascii")
+                + b" 0 R ] >>"
+            )
+        )
 
         page_ids: list[int] = []
-        content_ids: list[int] = []
         parent_placeholder = b"__PAGES_OBJECT__"
 
-        for page_lines in pages:
-            content_stream = self._build_page_stream(
-                page_lines=page_lines,
-                text_start_x=text_start_x,
-                text_start_y=text_start_y,
-                font_size=font_size,
-                leading=leading,
-            )
+        for page_index, page_lines in enumerate(pages):
+            content_stream = self._build_page_stream(page_index=page_index, page_lines=page_lines)
             content_id = add_object(
                 b"<< /Length "
                 + str(len(content_stream)).encode("ascii")
@@ -232,19 +356,18 @@ class PdfReportService:
                 + content_stream
                 + b"\nendstream"
             )
-            content_ids.append(content_id)
 
             page_id = add_object(
                 b"<< /Type /Page /Parent "
                 + parent_placeholder
                 + b" 0 R /MediaBox [0 0 "
-                + str(page_width).encode("ascii")
+                + str(self.fallback_page_width).encode("ascii")
                 + b" "
-                + str(page_height).encode("ascii")
+                + str(self.fallback_page_height).encode("ascii")
                 + b"] /Contents "
                 + str(content_id).encode("ascii")
                 + b" 0 R /Resources << /Font << /F1 "
-                + str(font_object).encode("ascii")
+                + str(font_object_id).encode("ascii")
                 + b" 0 R >> >> >>"
             )
             page_ids.append(page_id)
@@ -257,7 +380,6 @@ class PdfReportService:
             + kids
             + b" ] >>"
         )
-
         catalog_id = add_object(
             b"<< /Type /Catalog /Pages " + str(pages_object_id).encode("ascii") + b" 0 R >>"
         )
@@ -287,36 +409,62 @@ class PdfReportService:
         )
         return bytes(pdf)
 
-    def _build_page_stream(
-        self,
-        *,
-        page_lines: list[str],
-        text_start_x: int,
-        text_start_y: int,
-        font_size: int,
-        leading: int,
-    ) -> bytes:
-        operations = [
-            "BT",
-            f"/F1 {font_size} Tf",
-            f"{leading} TL",
-            f"1 0 0 1 {text_start_x} {text_start_y} Tm",
-        ]
+    def _build_page_stream(self, *, page_index: int, page_lines: list[str]) -> bytes:
+        start_x = self.page_margin
+        start_y = self.fallback_page_height - self.page_margin
+        text_sections = []
 
-        for index, line in enumerate(page_lines):
-            escaped = self._escape_pdf_text(self._normalize_text(line))
-            operations.append(f"({escaped}) Tj")
-            if index < len(page_lines) - 1:
-                operations.append("T*")
+        if page_index == 0 and page_lines:
+            title = page_lines[0]
+            text_sections.extend(
+                [
+                    "BT",
+                    f"/F1 {self.fallback_title_font_size} Tf",
+                    f"{self.line_height} TL",
+                    f"1 0 0 1 {start_x} {start_y} Tm",
+                    self._pdf_text_operator(title),
+                    "ET",
+                ]
+            )
+            remaining_lines = page_lines[1:]
+            if remaining_lines:
+                body_start_y = start_y - (self.line_height * 2)
+                text_sections.extend(
+                    [
+                        "BT",
+                        f"/F1 {self.fallback_font_size} Tf",
+                        f"{self.fallback_leading} TL",
+                        f"1 0 0 1 {start_x} {body_start_y} Tm",
+                    ]
+                )
+                for index, line in enumerate(remaining_lines):
+                    text_sections.append(self._pdf_text_operator(line))
+                    if index < len(remaining_lines) - 1:
+                        text_sections.append("T*")
+                text_sections.append("ET")
+        else:
+            text_sections.extend(
+                [
+                    "BT",
+                    f"/F1 {self.fallback_font_size} Tf",
+                    f"{self.fallback_leading} TL",
+                    f"1 0 0 1 {start_x} {start_y} Tm",
+                ]
+            )
+            for index, line in enumerate(page_lines):
+                text_sections.append(self._pdf_text_operator(line))
+                if index < len(page_lines) - 1:
+                    text_sections.append("T*")
+            text_sections.append("ET")
 
-        operations.append("ET")
-        return "\n".join(operations).encode("latin-1", errors="replace")
+        return "\n".join(text_sections).encode("ascii")
 
-    def _escape_pdf_text(self, value: str) -> str:
-        sanitized = value.encode("latin-1", errors="replace").decode("latin-1")
-        return (
-            sanitized.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        )
+    def _pdf_text_operator(self, value: str) -> str:
+        if not value:
+            return "<FEFF> Tj"
+
+        encoded = value.encode("utf-16-be").hex().upper()
+        return f"<FEFF{encoded}> Tj"
 
 
 pdf_report_service = PdfReportService()
