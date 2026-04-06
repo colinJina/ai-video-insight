@@ -1,4 +1,5 @@
 from io import BytesIO
+from itertools import count
 from re import sub
 
 from app.models.report import PdfReportRequest
@@ -16,10 +17,8 @@ class PdfReportService:
             from reportlab.lib.pagesizes import LETTER
             from reportlab.lib.utils import simpleSplit
             from reportlab.pdfgen import canvas
-        except ImportError as exc:
-            raise RuntimeError(
-                "PDF generation is unavailable because reportlab is not installed."
-            ) from exc
+        except ImportError:
+            return self._generate_without_reportlab(request)
 
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=LETTER)
@@ -77,6 +76,11 @@ class PdfReportService:
         buffer.seek(0)
         return buffer.read(), self._build_filename(request.title)
 
+    def _generate_without_reportlab(self, request: PdfReportRequest) -> tuple[bytes, str]:
+        pages = self._build_fallback_pages(request)
+        pdf_bytes = self._build_basic_pdf(pages)
+        return pdf_bytes, self._build_filename(request.title)
+
     def _build_bullet_lines(self, key_points: list[str], wrap_text) -> list[str]:
         lines: list[str] = []
 
@@ -123,6 +127,196 @@ class PdfReportService:
 
     def _normalize_text(self, value: str) -> str:
         return " ".join(value.split())
+
+    def _build_fallback_pages(self, request: PdfReportRequest) -> list[list[str]]:
+        max_chars_per_line = 88
+        max_lines_per_page = 44
+        pages: list[list[str]] = [[]]
+
+        def add_line(line: str = "") -> None:
+            current_page = pages[-1]
+            if len(current_page) >= max_lines_per_page:
+                pages.append([])
+                current_page = pages[-1]
+            current_page.append(line)
+
+        def add_wrapped(text: str, prefix: str = "") -> None:
+            normalized = self._normalize_text(text)
+            if not normalized:
+                return
+
+            words = normalized.split(" ")
+            first_line_prefix = prefix
+            continuation_prefix = " " * len(prefix)
+            current = first_line_prefix
+
+            for word in words:
+                separator = "" if current.endswith((" ", "-", "•")) or current == first_line_prefix else " "
+                candidate = f"{current}{separator}{word}"
+                if len(candidate) <= max_chars_per_line:
+                    current = candidate
+                    continue
+
+                add_line(current.rstrip())
+                current = f"{continuation_prefix}{word}"
+
+            add_line(current.rstrip())
+
+        add_wrapped(request.title)
+        add_line()
+
+        sections = [
+            ("Summary", [request.summary]),
+            ("Key Points", request.key_points),
+            (
+                "Outline",
+                [f"[{item.time}] {item.text}" if item.time else item.text for item in request.outline],
+            ),
+            (
+                "Chat History",
+                [f"{message.role.capitalize()}: {message.content}" for message in request.chat_history],
+            ),
+        ]
+
+        for title, entries in sections:
+            filtered_entries = [entry for entry in entries if self._normalize_text(entry)]
+            if not filtered_entries:
+                continue
+
+            add_line(title)
+            for index, entry in enumerate(filtered_entries):
+                prefix = "- " if title == "Key Points" else ""
+                add_wrapped(entry, prefix=prefix)
+                if title != "Summary" and index < len(filtered_entries) - 1:
+                    add_line()
+            add_line()
+
+        return [page for page in pages if page]
+
+    def _build_basic_pdf(self, pages: list[list[str]]) -> bytes:
+        page_width = 612
+        page_height = 792
+        text_start_x = 50
+        text_start_y = 742
+        font_size = 11
+        leading = 16
+
+        objects: list[bytes] = []
+        object_numbers = count(1)
+
+        def add_object(content: bytes) -> int:
+            object_number = next(object_numbers)
+            objects.append(
+                f"{object_number} 0 obj\n".encode("ascii") + content + b"\nendobj\n"
+            )
+            return object_number
+
+        font_object = add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+        page_ids: list[int] = []
+        content_ids: list[int] = []
+        parent_placeholder = b"__PAGES_OBJECT__"
+
+        for page_lines in pages:
+            content_stream = self._build_page_stream(
+                page_lines=page_lines,
+                text_start_x=text_start_x,
+                text_start_y=text_start_y,
+                font_size=font_size,
+                leading=leading,
+            )
+            content_id = add_object(
+                b"<< /Length "
+                + str(len(content_stream)).encode("ascii")
+                + b" >>\nstream\n"
+                + content_stream
+                + b"\nendstream"
+            )
+            content_ids.append(content_id)
+
+            page_id = add_object(
+                b"<< /Type /Page /Parent "
+                + parent_placeholder
+                + b" 0 R /MediaBox [0 0 "
+                + str(page_width).encode("ascii")
+                + b" "
+                + str(page_height).encode("ascii")
+                + b"] /Contents "
+                + str(content_id).encode("ascii")
+                + b" 0 R /Resources << /Font << /F1 "
+                + str(font_object).encode("ascii")
+                + b" 0 R >> >> >>"
+            )
+            page_ids.append(page_id)
+
+        kids = b" ".join(f"{page_id} 0 R".encode("ascii") for page_id in page_ids)
+        pages_object_id = add_object(
+            b"<< /Type /Pages /Count "
+            + str(len(page_ids)).encode("ascii")
+            + b" /Kids [ "
+            + kids
+            + b" ] >>"
+        )
+
+        catalog_id = add_object(
+            b"<< /Type /Catalog /Pages " + str(pages_object_id).encode("ascii") + b" 0 R >>"
+        )
+
+        fixed_objects = [
+            obj.replace(parent_placeholder + b" 0 R", f"{pages_object_id} 0 R".encode("ascii"))
+            for obj in objects
+        ]
+
+        pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+        offsets = [0]
+        for obj in fixed_objects:
+            offsets.append(len(pdf))
+            pdf.extend(obj)
+
+        xref_start = len(pdf)
+        pdf.extend(f"xref\n0 {len(fixed_objects) + 1}\n".encode("ascii"))
+        pdf.extend(b"0000000000 65535 f \n")
+        for offset in offsets[1:]:
+            pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+
+        pdf.extend(
+            (
+                f"trailer\n<< /Size {len(fixed_objects) + 1} /Root {catalog_id} 0 R >>\n"
+                f"startxref\n{xref_start}\n%%EOF"
+            ).encode("ascii")
+        )
+        return bytes(pdf)
+
+    def _build_page_stream(
+        self,
+        *,
+        page_lines: list[str],
+        text_start_x: int,
+        text_start_y: int,
+        font_size: int,
+        leading: int,
+    ) -> bytes:
+        operations = [
+            "BT",
+            f"/F1 {font_size} Tf",
+            f"{leading} TL",
+            f"1 0 0 1 {text_start_x} {text_start_y} Tm",
+        ]
+
+        for index, line in enumerate(page_lines):
+            escaped = self._escape_pdf_text(self._normalize_text(line))
+            operations.append(f"({escaped}) Tj")
+            if index < len(page_lines) - 1:
+                operations.append("T*")
+
+        operations.append("ET")
+        return "\n".join(operations).encode("latin-1", errors="replace")
+
+    def _escape_pdf_text(self, value: str) -> str:
+        sanitized = value.encode("latin-1", errors="replace").decode("latin-1")
+        return (
+            sanitized.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        )
 
 
 pdf_report_service = PdfReportService()

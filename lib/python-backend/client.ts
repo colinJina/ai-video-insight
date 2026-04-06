@@ -5,11 +5,13 @@ import {
   getPythonBackendTimeoutMs,
 } from "@/lib/python-backend/env";
 import type {
+  PythonBackendBinaryResponse,
   PythonBackendErrorPayload,
   PythonBackendJsonRequestOptions,
   PythonChatRequest,
   PythonChatResponse,
   PythonChatMemoryItem,
+  PythonPdfReportRequest,
 } from "@/lib/python-backend/types";
 
 function resolvePythonBackendBaseUrl() {
@@ -44,6 +46,15 @@ function readPythonBackendErrorMessage(
   const typedPayload = isRecord(payload) ? (payload as PythonBackendErrorPayload) : null;
   if (typedPayload && typeof typedPayload.detail === "string" && typedPayload.detail.trim()) {
     return typedPayload.detail;
+  }
+
+  if (
+    typedPayload &&
+    isRecord(typedPayload.error) &&
+    typeof typedPayload.error.message === "string" &&
+    typedPayload.error.message.trim()
+  ) {
+    return typedPayload.error.message;
   }
 
   return `The ${serviceLabel} returned status ${status}.`;
@@ -123,6 +134,79 @@ async function requestPythonBackendJson(
   return body;
 }
 
+function parseContentDispositionFilename(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const plainMatch = value.match(/filename="?([^"]+)"?/i);
+  return plainMatch?.[1] ?? null;
+}
+
+async function requestPythonBackendBinary(
+  options: PythonBackendJsonRequestOptions,
+): Promise<PythonBackendBinaryResponse> {
+  const {
+    pathname,
+    init,
+    serviceLabel,
+    timeoutMs = getPythonBackendTimeoutMs(),
+  } = options;
+  let response: Response;
+
+  try {
+    response = await fetchWithTimeout(
+      buildPythonBackendUrl(pathname),
+      init,
+      timeoutMs,
+    );
+  } catch (error) {
+    if (error instanceof TimeoutError) {
+      throw new TimeoutError(
+        `The ${serviceLabel} timed out. Please try again in a moment.`,
+      );
+    }
+
+    throw new ExternalServiceError(
+      `The ${serviceLabel} is unavailable. Make sure the Python backend is running and ${pathname} is reachable, then try again.`,
+      true,
+    );
+  }
+
+  if (!response.ok) {
+    const rawBody = await response.text();
+    let payload: unknown = null;
+
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      payload = null;
+    }
+
+    throw new ExternalServiceError(
+      readPythonBackendErrorMessage(payload, response.status, serviceLabel),
+      true,
+    );
+  }
+
+  return {
+    data: await response.arrayBuffer(),
+    contentType: response.headers.get("Content-Type") ?? "application/octet-stream",
+    filename: parseContentDispositionFilename(
+      response.headers.get("Content-Disposition"),
+    ),
+  };
+}
+
 export async function requestPythonChatAnswer(
   payload: PythonChatRequest,
 ): Promise<PythonChatResponse> {
@@ -162,4 +246,20 @@ export async function requestPythonChatAnswer(
           ? body.conversation_summary
           : null,
   };
+}
+
+export async function requestPythonPdfReport(
+  payload: PythonPdfReportRequest,
+): Promise<PythonBackendBinaryResponse> {
+  return requestPythonBackendBinary({
+    pathname: "/api/report/pdf",
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    serviceLabel: "Python PDF report service",
+  });
 }

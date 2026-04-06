@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import ExportPdfButton from "@/components/analysis/ExportPdfButton";
 import AppShell from "@/components/app/AppShell";
 import StatusBadge from "@/components/app/StatusBadge";
 import { getAnalysisTask, getAnalysisTaskForUser } from "@/lib/analysis/services/tasks";
@@ -41,6 +42,7 @@ export default async function AnalysisDetailPage({
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={analysis.status} />
+          <ExportPdfButton analysisId={analysis.id} />
           {session ? (
             <Link
               className="rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-2.5 font-headline text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.06)]"
