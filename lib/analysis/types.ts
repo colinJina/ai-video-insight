@@ -71,6 +71,16 @@ export interface AnalysisChatContext {
   suggestedQuestions: string[];
 }
 
+export interface AnalysisChatContextPayload {
+  userId: string;
+  analysisId: string;
+  analysisSummary: string | null;
+  transcriptExcerpt: string | null;
+  outline: OutlineItem[];
+  keyPoints: string[];
+  recentMessages: AnalysisChatMessage[];
+}
+
 export interface StructuredVideoSummary {
   title: string;
   summary: string;

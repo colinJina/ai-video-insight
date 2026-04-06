@@ -2,6 +2,13 @@ export interface PythonBackendErrorPayload {
   detail?: string;
 }
 
+export interface PythonBackendJsonRequestOptions {
+  pathname: string;
+  init: RequestInit;
+  serviceLabel: string;
+  timeoutMs?: number;
+}
+
 export interface PythonChatMessage {
   role: "system" | "assistant" | "user";
   content: string;

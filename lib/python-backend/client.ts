@@ -1,18 +1,19 @@
 import { ExternalServiceError, TimeoutError } from "@/lib/analysis/errors";
 import { fetchWithTimeout, isRecord } from "@/lib/analysis/utils";
+import {
+  getPythonBackendBaseUrl,
+  getPythonBackendTimeoutMs,
+} from "@/lib/python-backend/env";
 import type {
   PythonBackendErrorPayload,
+  PythonBackendJsonRequestOptions,
   PythonChatRequest,
   PythonChatResponse,
   PythonChatMemoryItem,
 } from "@/lib/python-backend/types";
 
-const DEFAULT_PYTHON_BACKEND_TIMEOUT_MS = Number(
-  process.env.PYTHON_BACKEND_TIMEOUT_MS ?? process.env.PYTHON_CHAT_TIMEOUT_MS ?? 20000,
-);
-
-function getPythonBackendBaseUrl() {
-  const baseUrl = process.env.PYTHON_BACKEND_BASE_URL?.trim();
+function resolvePythonBackendBaseUrl() {
+  const baseUrl = getPythonBackendBaseUrl();
 
   if (!baseUrl) {
     throw new ExternalServiceError(
@@ -32,7 +33,7 @@ function getPythonBackendBaseUrl() {
 }
 
 function buildPythonBackendUrl(pathname: string) {
-  return new URL(pathname, getPythonBackendBaseUrl()).toString();
+  return new URL(pathname, resolvePythonBackendBaseUrl()).toString();
 }
 
 function readPythonBackendErrorMessage(
@@ -71,11 +72,14 @@ function parseStringArray(value: unknown) {
 }
 
 async function requestPythonBackendJson(
-  pathname: string,
-  init: RequestInit,
-  serviceLabel: string,
-  timeoutMs = DEFAULT_PYTHON_BACKEND_TIMEOUT_MS,
+  options: PythonBackendJsonRequestOptions,
 ) {
+  const {
+    pathname,
+    init,
+    serviceLabel,
+    timeoutMs = getPythonBackendTimeoutMs(),
+  } = options;
   let response: Response;
 
   try {
@@ -92,7 +96,7 @@ async function requestPythonBackendJson(
     }
 
     throw new ExternalServiceError(
-      `The ${serviceLabel} is unavailable. Start the Python backend and try again.`,
+      `The ${serviceLabel} is unavailable. Make sure the Python backend is running and /api/chat/respond is reachable, then try again.`,
       true,
     );
   }
@@ -123,15 +127,17 @@ export async function requestPythonChatAnswer(
   payload: PythonChatRequest,
 ): Promise<PythonChatResponse> {
   const body = await requestPythonBackendJson(
-    "/api/chat/respond",
     {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+      pathname: "/api/chat/respond",
+      init: {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
+      serviceLabel: "Python chat service",
     },
-    "Python chat service",
   );
 
   if (!isRecord(body) || typeof body.answer !== "string" || !body.answer.trim()) {

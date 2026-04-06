@@ -10,6 +10,7 @@ import {
 import { createAssistantMessage, createUserMessage } from "@/lib/analysis/services/messages";
 import type {
   AnalysisChatMessage,
+  AnalysisChatContextPayload,
   AnalysisTask,
   AnalysisPublicTask,
   ChatInput,
@@ -32,32 +33,44 @@ function toPythonChatMessages(
 }
 
 function buildPythonChatRequest(
-  id: string,
-  userId: string,
   message: string,
-  taskWithUserMessage: AnalysisTask,
+  context: AnalysisChatContextPayload,
 ): PythonChatRequest {
-  if (!taskWithUserMessage?.result || !taskWithUserMessage.transcript) {
+  return {
+    userId: context.userId,
+    analysisId: context.analysisId,
+    analysisSummary: context.analysisSummary,
+    transcriptExcerpt: context.transcriptExcerpt,
+    outline: context.outline,
+    keyPoints: context.keyPoints,
+    message,
+    recentMessages: toPythonChatMessages(context.recentMessages),
+    memoryItems: [],
+  };
+}
+
+function buildAnalysisChatContext(
+  id: string,
+  task: AnalysisTask,
+  recentMessages: AnalysisChatMessage[],
+): AnalysisChatContextPayload {
+  if (!task.result || !task.transcript) {
     throw new ConflictError(
       "Wait for the video analysis to complete before sending chat messages.",
     );
   }
 
   return {
-    userId,
+    userId: task.userId,
     analysisId: id,
-    analysisSummary: taskWithUserMessage.result.summary,
-    transcriptExcerpt: buildTranscriptExcerpt(
-      taskWithUserMessage.transcript.segments,
-      2400,
-    ),
-    outline: taskWithUserMessage.result.outline,
-    keyPoints: taskWithUserMessage.result.keyPoints,
-    message,
-    recentMessages: toPythonChatMessages(taskWithUserMessage.chatMessages),
-    memoryItems: [],
+    analysisSummary: task.result.summary,
+    transcriptExcerpt: buildTranscriptExcerpt(task.transcript.segments, 2400),
+    outline: task.result.outline,
+    keyPoints: task.result.keyPoints,
+    recentMessages,
   };
 }
+
 export async function chatOnAnalysis(
   id: string,
   input: ChatInput,
@@ -79,24 +92,20 @@ export async function chatOnAnalysis(
   }
 
   const userMessage = createUserMessage(trimText(message, 500));
-  const taskWithUserMessage = await repository.appendChatMessages(id, [userMessage]);
-
-  if (!taskWithUserMessage) {
-    throw new NotFoundError("Could not find the requested analysis task.");
-  }
-
+  const context = buildAnalysisChatContext(id, task, [...task.chatMessages, userMessage]);
   const pythonRequest = buildPythonChatRequest(
-    id,
-    task.userId,
     userMessage.content,
-    taskWithUserMessage,
+    context,
   );
   const pythonResponse = await requestPythonChatAnswer(pythonRequest);
 
   const assistantMessage = createAssistantMessage(
     trimText(pythonResponse.answer, 480),
   );
-  const updatedTask = await repository.appendChatMessages(id, [assistantMessage]);
+  const updatedTask = await repository.appendChatMessages(id, [
+    userMessage,
+    assistantMessage,
+  ]);
 
   if (!updatedTask) {
     throw new NotFoundError("Could not find the requested analysis task.");

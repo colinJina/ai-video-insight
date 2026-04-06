@@ -23,12 +23,27 @@ Current capabilities:
 
 ## Local Development
 
+Run the Next.js app and the Python backend in separate terminals.
+
+Terminal 1:
+
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000/dashboard](http://localhost:3000/dashboard).
+Terminal 2:
+
+```bash
+cd python-backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+Copy-Item .env.example .env
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+```
+
+Then open [http://localhost:3000/dashboard](http://localhost:3000/dashboard).
 
 ## Environment Variables
 
@@ -62,6 +77,15 @@ YT_DLP_BIN=yt-dlp
 # Optional: make local processing state easier to observe
 ANALYSIS_MOCK_DELAY_MS=1200
 ```
+
+Required `.env.local` example items for the Python backend:
+
+```bash
+PYTHON_BACKEND_BASE_URL=http://127.0.0.1:8001
+PYTHON_BACKEND_TIMEOUT_MS=20000
+```
+
+`PYTHON_BACKEND_BASE_URL` should point to the FastAPI service. Next.js calls `POST /api/chat/respond` on that base URL, so both processes must be running locally for chat forwarding to work.
 
 ## Supabase Setup
 
@@ -108,6 +132,25 @@ TRANSCRIPT_UPLOAD_TIMEOUT_MS=300000
 - `POST /api/analysis/[id]/chat`
   - Body: `{ "message": "..." }`
   - Proxies the chat request to the Python backend configured by `PYTHON_BACKEND_BASE_URL`
+
+## Chat Request Flow
+
+The follow-up chat flow now stays UI-compatible while moving answer generation into the Python backend:
+
+1. The browser still sends `POST /api/analysis/[id]/chat` with `{ "message": "..." }`.
+2. The Next.js Route Handler loads the existing analysis task and validates that the analysis is already complete.
+3. Node extracts a compact chat context from the task:
+   - analysis summary
+   - transcript excerpt
+   - outline
+   - key points
+   - recent chat turns
+4. Node forwards that context to `POST {PYTHON_BACKEND_BASE_URL}/api/chat/respond`.
+5. Python returns a JSON payload with `answer`.
+6. Node appends both the new user message and the Python-generated assistant answer to `chatMessages`.
+7. The dashboard re-renders exactly as before because the frontend still receives the same `analysis` payload shape.
+
+If the Python backend is unavailable or times out, the API returns a clear English error response and does not append a partial chat turn.
 
 ## Project Layout
 

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
+import { getSupabaseUrl, isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
 const OAUTH_PROVIDERS = [
   {
@@ -22,6 +22,13 @@ const OAUTH_PROVIDERS = [
 ] as const;
 
 type OAuthProvider = (typeof OAUTH_PROVIDERS)[number]["id"];
+
+type AuthHealthResponse = {
+  ok: boolean;
+  error?: {
+    message?: string;
+  };
+};
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -52,6 +59,44 @@ export default function LoginForm({
   );
   const [isAwaitingEmailCode, setIsAwaitingEmailCode] = useState(false);
 
+  const buildSupabaseUnavailableError = () =>
+    new Error(
+      `Cannot reach Supabase Auth at ${getSupabaseUrl()}. Check your network, DNS, proxy, and Supabase project URL, then try again.`,
+    );
+
+  const ensureSupabaseAuthReachable = async () => {
+    const response = await fetch("/api/auth/health", {
+      cache: "no-store",
+    });
+
+    let payload: AuthHealthResponse | null = null;
+
+    try {
+      payload = (await response.json()) as AuthHealthResponse;
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok || !payload?.ok) {
+      throw new Error(
+        payload?.error?.message ??
+          buildSupabaseUnavailableError().message,
+      );
+    }
+  };
+
+  const toFriendlyAuthError = (value: unknown) => {
+    if (value instanceof Error) {
+      if (value.message === "Failed to fetch") {
+        return buildSupabaseUnavailableError().message;
+      }
+
+      return value.message;
+    }
+
+    return "Sign-in failed. Please try again.";
+  };
+
   const submitDemoLogin = async () => {
     const response = await fetch("/api/auth/demo-login", {
       method: "POST",
@@ -75,6 +120,8 @@ export default function LoginForm({
   };
 
   const submitSupabaseLogin = async (provider: OAuthProvider) => {
+    await ensureSupabaseAuthReachable();
+
     const supabase = createSupabaseBrowserClient();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectToPath)}`;
     const { error: signInError } = await supabase.auth.signInWithOAuth({
@@ -90,6 +137,8 @@ export default function LoginForm({
   };
 
   const submitEmailCode = async () => {
+    await ensureSupabaseAuthReachable();
+
     const supabase = createSupabaseBrowserClient();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectToPath)}`;
     const normalizedEmail = email.trim();
@@ -119,8 +168,8 @@ export default function LoginForm({
       throw new Error("Please enter your email address first.");
     }
 
-    if (!/^\d{8}$/.test(normalizedCode)) {
-      throw new Error("Please enter the 8-digit verification code.");
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      throw new Error("Please enter the 6-digit verification code.");
     }
 
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -147,9 +196,7 @@ export default function LoginForm({
       await submitSupabaseLogin(provider);
       setMessage("Redirecting to the provider. Finish the authorization flow to return here.");
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "Sign-in failed. Please try again.",
-      );
+      setError(toFriendlyAuthError(nextError));
       setIsSubmitting(false);
       setActiveProvider(null);
     }
@@ -164,23 +211,21 @@ export default function LoginForm({
     try {
       if (authConfigured) {
         if (isAwaitingEmailCode) {
-          await verifyEmailCode();
-          return;
-        }
-
-        await submitEmailCode();
-        setIsAwaitingEmailCode(true);
-        setMessage("We sent an 8-digit verification code to your email. Enter it below to finish signing in.");
-        setIsSubmitting(false);
-        setActiveProvider(null);
+        await verifyEmailCode();
         return;
+      }
+
+      await submitEmailCode();
+      setIsAwaitingEmailCode(true);
+      setMessage("We sent a 6-digit verification code to your email. Enter it below to finish signing in.");
+      setIsSubmitting(false);
+      setActiveProvider(null);
+      return;
       }
 
       await submitDemoLogin();
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "Sign-in failed. Please try again.",
-      );
+      setError(toFriendlyAuthError(nextError));
       setIsSubmitting(false);
       setActiveProvider(null);
     }
@@ -254,11 +299,11 @@ export default function LoginForm({
               autoComplete="one-time-code"
               className="w-full rounded-none border border-[rgba(63,40,24,0.28)] bg-[rgba(255,252,246,0.92)] px-4 py-4 text-[15px] tracking-[0.32em] text-[#2f1b0e] outline-none transition-colors placeholder:text-[rgba(120,77,42,0.58)] focus:border-[rgba(191,114,31,0.7)]"
               inputMode="numeric"
-              maxLength={8}
+              maxLength={6}
               onChange={(event) =>
-                setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 8))
+                setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))
               }
-              placeholder="12345678"
+              placeholder="123456"
               type="text"
               value={verificationCode}
             />
@@ -270,7 +315,7 @@ export default function LoginForm({
           disabled={
             isSubmitting ||
             !email.trim() ||
-            (authConfigured && isAwaitingEmailCode && verificationCode.trim().length !== 8)
+            (authConfigured && isAwaitingEmailCode && verificationCode.trim().length !== 6)
           }
           onClick={() => void handleEmailSubmit()}
           type="button"
@@ -293,7 +338,7 @@ export default function LoginForm({
             onClick={() => {
               setVerificationCode("");
               setIsAwaitingEmailCode(false);
-              setMessage("You can request a new 8-digit code for this email.");
+              setMessage("You can request a new 6-digit code for this email.");
               setError(null);
               setIsSubmitting(false);
               setActiveProvider(null);
