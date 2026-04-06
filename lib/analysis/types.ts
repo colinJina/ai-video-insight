@@ -87,6 +87,19 @@ export interface AnalysisChatContextPayload {
   }[];
 }
 
+export interface AnalysisChatMemorySnapshot {
+  kind: string;
+  content: string;
+  source?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AnalysisChatRuntimeState {
+  memoryHits: string[];
+  conversationSummary: string | null;
+  memoryItems: AnalysisChatMemorySnapshot[];
+}
+
 export interface StructuredVideoSummary {
   title: string;
   summary: string;
@@ -114,7 +127,9 @@ export interface AnalysisTask {
   updatedAt: string;
 }
 
-export type AnalysisPublicTask = Omit<AnalysisTask, "transcript">;
+export type AnalysisPublicTask = Omit<AnalysisTask, "transcript"> & {
+  chatRuntime?: AnalysisChatRuntimeState;
+};
 
 export interface AnalysisListInput {
   userId: string;

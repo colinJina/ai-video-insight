@@ -11,6 +11,7 @@ import { createAssistantMessage, createUserMessage } from "@/lib/analysis/servic
 import type {
   AnalysisChatMessage,
   AnalysisChatContextPayload,
+  AnalysisChatRuntimeState,
   AnalysisTask,
   AnalysisPublicTask,
   ChatInput,
@@ -124,6 +125,21 @@ function buildAnalysisChatContext(
   };
 }
 
+function buildChatRuntimeState(
+  pythonResponse: Awaited<ReturnType<typeof requestPythonChatAnswer>>,
+): AnalysisChatRuntimeState {
+  return {
+    memoryHits: pythonResponse.memoryHits,
+    conversationSummary: pythonResponse.conversationSummary,
+    memoryItems: pythonResponse.memoryItems.map((item) => ({
+      kind: item.kind,
+      content: item.content,
+      source: item.source,
+      metadata: item.metadata,
+    })),
+  };
+}
+
 export async function chatOnAnalysis(
   id: string,
   input: ChatInput,
@@ -164,5 +180,8 @@ export async function chatOnAnalysis(
     throw new NotFoundError("Could not find the requested analysis task.");
   }
 
-  return toPublicAnalysisTask(updatedTask);
+  return {
+    ...toPublicAnalysisTask(updatedTask),
+    chatRuntime: buildChatRuntimeState(pythonResponse),
+  };
 }
