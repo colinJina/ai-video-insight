@@ -16,7 +16,10 @@ import type {
   ChatInput,
 } from "@/lib/analysis/types";
 import { requestPythonChatAnswer } from "@/lib/python-backend/client";
-import type { PythonChatRequest } from "@/lib/python-backend/types";
+import type {
+  PythonChatMemoryItem,
+  PythonChatRequest,
+} from "@/lib/python-backend/types";
 import {
   buildTranscriptExcerpt,
   normalizeWhitespace,
@@ -45,8 +48,57 @@ function buildPythonChatRequest(
     keyPoints: context.keyPoints,
     message,
     recentMessages: toPythonChatMessages(context.recentMessages),
-    memoryItems: [],
+    memoryItems: context.memoryItems,
   };
+}
+
+function buildRequestDrivenMemoryItems(
+  task: AnalysisTask,
+): PythonChatMemoryItem[] {
+  if (!task.result) {
+    return [];
+  }
+
+  const memoryItems: PythonChatMemoryItem[] = [];
+
+  if (task.result.summary) {
+    memoryItems.push({
+      kind: "analysis_summary",
+      content: task.result.summary,
+      source: "analysis.result.summary",
+      metadata: {
+        scope: "long_term",
+      },
+    });
+  }
+
+  task.result.keyPoints.slice(0, 6).forEach((keyPoint, index) => {
+    memoryItems.push({
+      kind: "key_point",
+      content: keyPoint,
+      source: "analysis.result.keyPoints",
+      metadata: {
+        scope: "long_term",
+        index,
+      },
+    });
+  });
+
+  task.result.outline.slice(0, 8).forEach((item, index) => {
+    const content = item.time ? `[${item.time}] ${item.text}` : item.text;
+    memoryItems.push({
+      kind: "outline_item",
+      content,
+      source: "analysis.result.outline",
+      metadata: {
+        scope: "long_term",
+        index,
+        time: item.time,
+      },
+    });
+  });
+
+  return memoryItems;
 }
 
 function buildAnalysisChatContext(
@@ -68,6 +120,7 @@ function buildAnalysisChatContext(
     outline: task.result.outline,
     keyPoints: task.result.keyPoints,
     recentMessages,
+    memoryItems: buildRequestDrivenMemoryItems(task),
   };
 }
 

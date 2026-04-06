@@ -15,6 +15,11 @@ class ChatResponseGenerator:
             if memory_items
             else "Memory injection slot is ready."
         )
+        memory_hits_status = (
+            f"Memory hits available: {len(context.memory_hits)}."
+            if context.memory_hits
+            else "No memory hits were recorded."
+        )
 
         analysis_status = (
             "Analysis context attached."
@@ -33,6 +38,7 @@ class ChatResponseGenerator:
             f"Recent turns available: {context.conversation_turn_count}. "
             f"{analysis_status} "
             f"{memory_status} "
+            f"{memory_hits_status} "
             f"Unified context length: {len(context.assembled_context)} characters. "
             "This endpoint is ready for memory, retrieval, PDF workflows, and future LangChain integration."
         )

@@ -79,6 +79,12 @@ export interface AnalysisChatContextPayload {
   outline: OutlineItem[];
   keyPoints: string[];
   recentMessages: AnalysisChatMessage[];
+  memoryItems: {
+    kind: string;
+    content: string;
+    source?: string | null;
+    metadata?: Record<string, unknown>;
+  }[];
 }
 
 export interface StructuredVideoSummary {

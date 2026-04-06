@@ -21,6 +21,8 @@ class ChatContextBuilder:
             recent_messages=recent_messages,
             analysis_summary=chat_input.analysis_summary,
             transcript_excerpt=chat_input.transcript_excerpt,
+            outline=chat_input.outline,
+            key_points=chat_input.key_points,
             memory_items=memory_items,
         )
 
@@ -53,6 +55,8 @@ class ChatContextBuilder:
         recent_messages: list[ChatMessage],
         analysis_summary: str | None,
         transcript_excerpt: str | None,
+        outline: list,
+        key_points: list[str],
         memory_items: list[ChatMemoryItem],
     ) -> str:
         sections: list[str] = []
@@ -68,6 +72,17 @@ class ChatContextBuilder:
 
         if transcript_excerpt:
             sections.append(f"Transcript excerpt:\n{transcript_excerpt}")
+
+        if key_points:
+            rendered_key_points = "\n".join(f"- {item}" for item in key_points)
+            sections.append(f"Key points:\n{rendered_key_points}")
+
+        if outline:
+            rendered_outline = "\n".join(
+                f"- [{item.time}] {item.text}" if item.time else f"- {item.text}"
+                for item in outline
+            )
+            sections.append(f"Outline:\n{rendered_outline}")
 
         if memory_items:
             rendered_memory = "\n".join(
