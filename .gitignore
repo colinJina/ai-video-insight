@@ -42,3 +42,13 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
