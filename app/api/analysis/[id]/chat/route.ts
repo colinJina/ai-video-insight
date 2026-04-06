@@ -4,6 +4,7 @@ import {
   getErrorCode,
   getErrorStatusCode,
   getPublicErrorMessage,
+  ValidationError,
 } from "@/lib/analysis/errors";
 import { chatOnAnalysis } from "@/lib/analysis/services/chat";
 import type { ChatInput } from "@/lib/analysis/types";
@@ -26,7 +27,7 @@ export async function POST(
 ) {
   try {
     const { id } = await context.params;
-    const body = (await request.json()) as Partial<ChatInput>;
+    const body = await readChatInput(request);
     const analysis = await chatOnAnalysis(id, {
       message: body.message ?? "",
     });
@@ -50,5 +51,13 @@ export async function POST(
         headers: NO_STORE_HEADERS,
       },
     );
+  }
+}
+
+async function readChatInput(request: Request): Promise<Partial<ChatInput>> {
+  try {
+    return (await request.json()) as Partial<ChatInput>;
+  } catch {
+    throw new ValidationError("The chat request body must be valid JSON.");
   }
 }

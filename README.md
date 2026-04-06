@@ -47,6 +47,11 @@ AI_API_KEY=
 AI_MODEL=
 AI_TIMEOUT_MS=25000
 
+# Python chat backend
+PYTHON_BACKEND_BASE_URL=http://127.0.0.1:8001
+PYTHON_BACKEND_TIMEOUT_MS=20000
+PYTHON_CHAT_TIMEOUT_MS=20000
+
 # Transcript provider
 TRANSCRIPT_PROVIDER=mock
 YT_DLP_BIN=yt-dlp
@@ -102,6 +107,7 @@ TRANSCRIPT_UPLOAD_TIMEOUT_MS=300000
   - Returns task status, video metadata, analysis result, and chat messages
 - `POST /api/analysis/[id]/chat`
   - Body: `{ "message": "..." }`
+  - Proxies the chat request to the Python backend configured by `PYTHON_BACKEND_BASE_URL`
 
 ## Project Layout
 
