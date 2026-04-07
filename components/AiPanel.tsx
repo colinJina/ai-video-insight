@@ -265,7 +265,7 @@ function ChatPanel({
           className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 pr-12 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(88,66,53,1)] focus:border-[color:var(--primary-strong)]"
           disabled={isChatPending}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Ask a follow-up about this video"
+          placeholder="Ask about this video, its key ideas, timestamps, or practical applications"
           type="text"
           value={draft}
         />
@@ -279,6 +279,10 @@ function ChatPanel({
           </span>
         </button>
       </form>
+      <p className="text-xs leading-6 text-[color:var(--text-muted)]">
+        Keep questions focused on the current video. Good examples: summary, key ideas,
+        timestamps, explanations, and practical extensions of the video's content.
+      </p>
     </div>
   );
 }
