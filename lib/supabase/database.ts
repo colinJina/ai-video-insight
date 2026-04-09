@@ -16,6 +16,18 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type TranscriptChunkRow = {
+  id: string;
+  analysis_id: string;
+  user_id: string;
+  chunk_index: number;
+  text: string;
+  start_seconds: number | null;
+  end_seconds: number | null;
+  embedding: number[];
+  created_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -49,6 +61,22 @@ export interface Database {
           updated_at: string;
         };
         Update: Partial<Database["public"]["Tables"]["analysis_records"]["Row"]>;
+        Relationships: [];
+      };
+      analysis_transcript_chunks: {
+        Row: TranscriptChunkRow;
+        Insert: {
+          id?: string;
+          analysis_id: string;
+          user_id: string;
+          chunk_index: number;
+          text: string;
+          start_seconds?: number | null;
+          end_seconds?: number | null;
+          embedding: number[];
+          created_at?: string;
+        };
+        Update: Partial<TranscriptChunkRow>;
         Relationships: [];
       };
       user_notifications: {
@@ -97,7 +125,26 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_analysis_transcript_chunks: {
+        Args: {
+          filter_analysis_id: string;
+          filter_user_id: string;
+          query_embedding: number[];
+          match_count?: number;
+        };
+        Returns: Array<{
+          id: string;
+          analysis_id: string;
+          user_id: string;
+          chunk_index: number;
+          text: string;
+          start_seconds: number | null;
+          end_seconds: number | null;
+          score: number;
+        }>;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

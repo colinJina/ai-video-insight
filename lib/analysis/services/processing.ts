@@ -2,11 +2,14 @@ import {
   ExternalServiceError,
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
+import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
 import { createAiProvider } from "@/lib/analysis/providers/ai";
 import { createTranscriptProvider } from "@/lib/analysis/providers/transcript";
 import { getAnalysisRepository } from "@/lib/analysis/repository";
 import { buildAnalysisResult } from "@/lib/analysis/result";
 import { createAssistantMessage } from "@/lib/analysis/services/messages";
+import { getTranscriptChunkRepository } from "@/lib/analysis/transcript-chunk-repository";
+import { chunkTranscriptSegments } from "@/lib/analysis/transcript-chunking";
 import { createNotification } from "@/lib/notifications/service";
 
 function buildProcessingErrorMessage(
@@ -25,6 +28,36 @@ function buildProcessingErrorMessage(
   }
 
   return `AI summary generation failed. ${detail}`;
+}
+
+async function indexTranscriptChunks(input: {
+  analysisId: string;
+  userId: string;
+  transcript: Parameters<typeof chunkTranscriptSegments>[0];
+}) {
+  const embeddingProvider = createEmbeddingProvider();
+  if (!embeddingProvider.isConfigured()) {
+    return;
+  }
+
+  const chunks = chunkTranscriptSegments(input.transcript);
+  if (chunks.length === 0) {
+    return;
+  }
+
+  const chunkRepository = getTranscriptChunkRepository();
+  const chunkRows = await Promise.all(
+    chunks.map(async (chunk) => ({
+      ...chunk,
+      embedding: await embeddingProvider.embedText(chunk.text),
+    })),
+  );
+
+  await chunkRepository.replaceForAnalysis({
+    analysisId: input.analysisId,
+    userId: input.userId,
+    chunks: chunkRows,
+  });
 }
 
 export async function processAnalysisTask(id: string) {
@@ -69,6 +102,19 @@ export async function processAnalysisTask(id: string) {
         chatMessages: [introMessage],
         errorMessage: null,
       });
+
+      try {
+        await indexTranscriptChunks({
+          analysisId: latestTask.id,
+          userId: latestTask.userId,
+          transcript: transcript.segments,
+        });
+      } catch (error) {
+        console.warn(
+          `[analysis] Transcript chunk indexing failed for analysis ${latestTask.id}. Falling back to static transcript excerpts.`,
+          error,
+        );
+      }
 
       await createNotification({
         userId: latestTask.userId,

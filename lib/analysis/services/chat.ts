@@ -3,15 +3,18 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/analysis/errors";
+import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
 import {
   getAnalysisRepository,
   toPublicAnalysisTask,
 } from "@/lib/analysis/repository";
 import { createAssistantMessage, createUserMessage } from "@/lib/analysis/services/messages";
+import { getTranscriptChunkRepository } from "@/lib/analysis/transcript-chunk-repository";
 import type {
   AnalysisChatMessage,
   AnalysisChatContextPayload,
   AnalysisChatRuntimeState,
+  TranscriptChunkMatch,
   AnalysisTask,
   AnalysisPublicTask,
   ChatInput,
@@ -23,9 +26,13 @@ import type {
 } from "@/lib/python-backend/types";
 import {
   buildTranscriptExcerpt,
+  formatTimestamp,
+  hasUsableTimestamp,
   normalizeWhitespace,
   trimText,
 } from "@/lib/analysis/utils";
+
+const RETRIEVED_CHUNK_LIMIT = 4;
 
 function toPythonChatMessages(
   messages: AnalysisChatMessage[],
@@ -102,26 +109,104 @@ function buildRequestDrivenMemoryItems(
   return memoryItems;
 }
 
-function buildAnalysisChatContext(
+function buildRetrievedChunkMemoryItems(
+  matches: TranscriptChunkMatch[],
+): PythonChatMemoryItem[] {
+  const sortedMatches = [...matches].sort(
+    (left, right) => left.chunkIndex - right.chunkIndex,
+  );
+
+  return sortedMatches.map((match) => ({
+    kind: "retrieved_chunk",
+    content: match.text,
+    source: "analysis.transcript_chunks",
+    metadata: {
+      chunkIndex: match.chunkIndex,
+      score: Number(match.score.toFixed(6)),
+      startSeconds: match.startSeconds,
+      endSeconds: match.endSeconds,
+    },
+  }));
+}
+
+function buildRetrievedTranscriptExcerpt(
+  matches: TranscriptChunkMatch[],
+) {
+  const sortedMatches = [...matches].sort(
+    (left, right) => left.chunkIndex - right.chunkIndex,
+  );
+
+  return trimText(
+    sortedMatches
+      .map((match) =>
+        hasUsableTimestamp(match.startSeconds)
+          ? `[${formatTimestamp(match.startSeconds)}] ${match.text}`
+          : match.text,
+      )
+      .join(" "),
+    2400,
+  );
+}
+
+async function retrieveTranscriptMatches(
+  task: AnalysisTask,
+  message: string,
+) {
+  const embeddingProvider = createEmbeddingProvider();
+  if (!embeddingProvider.isConfigured()) {
+    return [];
+  }
+
+  const repository = getTranscriptChunkRepository();
+
+  try {
+    const queryEmbedding = await embeddingProvider.embedText(message);
+    return await repository.matchForAnalysis({
+      analysisId: task.id,
+      userId: task.userId,
+      queryEmbedding,
+      limit: RETRIEVED_CHUNK_LIMIT,
+    });
+  } catch (error) {
+    console.warn(
+      `[analysis] Transcript retrieval failed for analysis ${task.id}. Falling back to static transcript excerpt.`,
+      error,
+    );
+    return [];
+  }
+}
+
+async function buildAnalysisChatContext(
   id: string,
   task: AnalysisTask,
   recentMessages: AnalysisChatMessage[],
-): AnalysisChatContextPayload {
+  latestMessage: string,
+): Promise<AnalysisChatContextPayload> {
   if (!task.result || !task.transcript) {
     throw new ConflictError(
       "Wait for the video analysis to complete before sending chat messages.",
     );
   }
 
+  const retrievedMatches = await retrieveTranscriptMatches(task, latestMessage);
+  const retrievedMemoryItems = buildRetrievedChunkMemoryItems(retrievedMatches);
+  const transcriptExcerpt =
+    retrievedMatches.length > 0
+      ? buildRetrievedTranscriptExcerpt(retrievedMatches)
+      : buildTranscriptExcerpt(task.transcript.segments, 2400);
+
   return {
     userId: task.userId,
     analysisId: id,
     analysisSummary: task.result.summary,
-    transcriptExcerpt: buildTranscriptExcerpt(task.transcript.segments, 2400),
+    transcriptExcerpt,
     outline: task.result.outline,
     keyPoints: task.result.keyPoints,
     recentMessages,
-    memoryItems: buildRequestDrivenMemoryItems(task),
+    memoryItems: [
+      ...buildRequestDrivenMemoryItems(task),
+      ...retrievedMemoryItems,
+    ],
   };
 }
 
@@ -161,7 +246,12 @@ export async function chatOnAnalysis(
   }
 
   const userMessage = createUserMessage(trimText(message, 500));
-  const context = buildAnalysisChatContext(id, task, [...task.chatMessages, userMessage]);
+  const context = await buildAnalysisChatContext(
+    id,
+    task,
+    [...task.chatMessages, userMessage],
+    userMessage.content,
+  );
   const pythonRequest = buildPythonChatRequest(
     userMessage.content,
     context,

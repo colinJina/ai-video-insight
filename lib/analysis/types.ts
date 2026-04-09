@@ -23,6 +23,7 @@ export type AnalysisViewStatus =
 
 export type TranscriptSourceKind = "mock" | "remote";
 export type AiProviderKind = "mock" | "http";
+export type EmbeddingProviderKind = "disabled" | "http";
 
 export interface VideoSource {
   originalUrl: string;
@@ -52,6 +53,20 @@ export interface TranscriptData {
   language: string;
   fullText: string;
   segments: TranscriptSegment[];
+}
+
+export interface TranscriptChunk {
+  chunkIndex: number;
+  text: string;
+  startSeconds: number | null;
+  endSeconds: number | null;
+}
+
+export interface TranscriptChunkMatch extends TranscriptChunk {
+  id: string;
+  userId: string;
+  analysisId: string;
+  score: number;
 }
 
 export interface OutlineItem {
@@ -173,6 +188,12 @@ export interface AIProvider {
     input: GenerateVideoSummaryInput,
   ): Promise<StructuredVideoSummary>;
   chatWithVideoContext(input: ChatWithVideoContextInput): Promise<string>;
+}
+
+export interface EmbeddingProvider {
+  kind: EmbeddingProviderKind;
+  isConfigured(): boolean;
+  embedText(input: string): Promise<number[]>;
 }
 
 export interface TranscriptProvider {
