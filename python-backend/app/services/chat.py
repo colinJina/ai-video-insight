@@ -4,7 +4,6 @@ from app.services.chat_generation import ChatResponseGenerator
 from app.services.chat_memory import ChatMemoryLoader
 from app.services.chat_model import ChatModelGateway, chat_model_gateway
 from app.services.chat_summary import ConversationSummarizer
-from app.services.chat_topic_guard import ChatTopicGuard
 from app.services.chat_validation import ChatInputSanitizer
 
 
@@ -17,7 +16,6 @@ class ChatService:
         context_builder: ChatContextBuilder | None = None,
         memory_loader: ChatMemoryLoader | None = None,
         summarizer: ConversationSummarizer | None = None,
-        topic_guard: ChatTopicGuard | None = None,
         model_gateway: ChatModelGateway | None = None,
         response_generator: ChatResponseGenerator | None = None,
     ) -> None:
@@ -25,7 +23,6 @@ class ChatService:
         self.context_builder = context_builder or ChatContextBuilder()
         self.memory_loader = memory_loader or ChatMemoryLoader()
         self.summarizer = summarizer or ConversationSummarizer()
-        self.topic_guard = topic_guard or ChatTopicGuard()
         self.model_gateway = model_gateway or chat_model_gateway
         self.response_generator = response_generator or ChatResponseGenerator()
 
@@ -45,16 +42,6 @@ class ChatService:
             conversation_summary,
             conversation_was_compressed,
         )
-        topic_result = self.topic_guard.check(context)
-        if not topic_result.allowed:
-            return ChatResponse(
-                answer=topic_result.message
-                or "Please ask a question that stays closer to the current video.",
-                memory_items=memory_items,
-                memory_hits=context.memory_hits,
-                conversation_summary=context.conversation_summary,
-            )
-
         model_answer = self.model_gateway.generate(context)
         return self.response_generator.generate(context, memory_items, model_answer)
 
