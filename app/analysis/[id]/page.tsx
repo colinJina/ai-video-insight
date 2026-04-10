@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AnalysisConversation from "@/components/analysis/AnalysisConversation";
 import ExportPdfButton from "@/components/analysis/ExportPdfButton";
 import AppShell from "@/components/app/AppShell";
 import StatusBadge from "@/components/app/StatusBadge";
@@ -153,26 +154,7 @@ export default async function AnalysisDetailPage({
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.26em] text-[color:var(--primary-strong)]">
             Conversation History
           </p>
-          <div className="mt-5 space-y-4">
-            {analysis.chatMessages.length > 0 ? (
-              analysis.chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={
-                    message.role === "assistant"
-                      ? "rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4 text-sm leading-7 text-[color:var(--text-muted)]"
-                      : "rounded-2xl border border-primary/20 bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-white"
-                  }
-                >
-                  {message.content}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm leading-7 text-[color:var(--text-muted)]">
-                This record does not have any conversation history yet.
-              </p>
-            )}
-          </div>
+          <AnalysisConversation initialAnalysis={analysis} />
         </section>
       </div>
     </AppShell>

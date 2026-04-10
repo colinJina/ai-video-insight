@@ -1,6 +1,47 @@
 import type { AppNotification } from "@/lib/app/types";
 import { getNotificationRepository } from "@/lib/notifications/repository";
 
+type ErrorWithMetadata = {
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  message?: string | null;
+  name?: string | null;
+  status?: number | null;
+};
+
+function toLoggableError(error: unknown) {
+  if (error instanceof Error) {
+    const candidate = error as ErrorWithMetadata;
+
+    return {
+      name: error.name,
+      message: error.message,
+      code: candidate.code ?? null,
+      details: candidate.details ?? null,
+      hint: candidate.hint ?? null,
+      status: candidate.status ?? null,
+    };
+  }
+
+  if (typeof error === "object" && error) {
+    const candidate = error as ErrorWithMetadata;
+
+    return {
+      name: candidate.name ?? null,
+      message: candidate.message ?? null,
+      code: candidate.code ?? null,
+      details: candidate.details ?? null,
+      hint: candidate.hint ?? null,
+      status: candidate.status ?? null,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
+
 function buildWelcomeNotification(userId: string): AppNotification {
   return {
     id: `welcome-${userId}`,
@@ -23,12 +64,12 @@ export async function createNotification(
   try {
     return await getNotificationRepository().create(input);
   } catch (error) {
-    console.error(
+    console.warn(
       "[notifications] Failed to persist notification, continuing without blocking the request.",
       {
         userId: input.userId,
         type: input.type,
-        error,
+        error: toLoggableError(error),
       },
     );
 
@@ -51,9 +92,9 @@ export async function listNotificationsForUser(userId: string) {
   try {
     notifications = await getNotificationRepository().listByUser(userId);
   } catch (error) {
-    console.error("[notifications] Failed to load notifications, returning welcome fallback.", {
+    console.warn("[notifications] Failed to load notifications, returning welcome fallback.", {
       userId,
-      error,
+      error: toLoggableError(error),
     });
     notifications = [];
   }
@@ -69,9 +110,9 @@ export async function countUnreadNotifications(userId: string) {
   try {
     return await getNotificationRepository().countUnread(userId);
   } catch (error) {
-    console.error("[notifications] Failed to count unread notifications, returning zero.", {
+    console.warn("[notifications] Failed to count unread notifications, returning zero.", {
       userId,
-      error,
+      error: toLoggableError(error),
     });
     return 0;
   }

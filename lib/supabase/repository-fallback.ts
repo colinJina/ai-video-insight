@@ -1,5 +1,6 @@
 type SupabaseLikeError = {
   code?: string | null;
+  hint?: string | null;
   message?: string | null;
   details?: string | null;
 };
@@ -25,7 +26,9 @@ export function shouldFallbackToMemoryRepository(error: unknown) {
 
   return (
     candidate.code === "PGRST205" ||
+    candidate.code === "42P01" ||
     includesTableMissingText(candidate.message) ||
-    includesTableMissingText(candidate.details)
+    includesTableMissingText(candidate.details) ||
+    includesTableMissingText(candidate.hint)
   );
 }
