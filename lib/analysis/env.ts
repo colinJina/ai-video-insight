@@ -1,4 +1,8 @@
 const DEFAULT_EMBEDDING_TIMEOUT_MS = 20000;
+const DEFAULT_RETRIEVAL_CANDIDATE_LIMIT = 12;
+const DEFAULT_RETRIEVAL_FINAL_LIMIT = 4;
+const DEFAULT_RETRIEVAL_NEIGHBOR_WINDOW = 1;
+const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.55;
 
 function normalizeTimeout(value: string | undefined) {
   const parsed = Number(value);
@@ -7,6 +11,27 @@ function normalizeTimeout(value: string | undefined) {
   }
 
   return Math.floor(parsed);
+}
+
+function normalizePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.floor(parsed);
+}
+
+function normalizeThreshold(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, 0), 1);
 }
 
 export function getEmbeddingBaseUrl() {
@@ -31,4 +56,38 @@ export function isEmbeddingConfigured() {
       getEmbeddingApiKey() &&
       getEmbeddingModel(),
   );
+}
+
+export function getRetrievalCandidateLimit() {
+  return normalizePositiveInteger(
+    process.env.RETRIEVAL_CANDIDATE_LIMIT,
+    DEFAULT_RETRIEVAL_CANDIDATE_LIMIT,
+  );
+}
+
+export function getRetrievalFinalLimit() {
+  return normalizePositiveInteger(
+    process.env.RETRIEVAL_FINAL_LIMIT,
+    DEFAULT_RETRIEVAL_FINAL_LIMIT,
+  );
+}
+
+export function getRetrievalNeighborWindow() {
+  return normalizePositiveInteger(
+    process.env.RETRIEVAL_NEIGHBOR_WINDOW,
+    DEFAULT_RETRIEVAL_NEIGHBOR_WINDOW,
+  );
+}
+
+export function getRetrievalScoreThreshold() {
+  return normalizeThreshold(
+    process.env.RETRIEVAL_SCORE_THRESHOLD,
+    DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
+  );
+}
+
+export function isRetrievalQueryRewriteEnabled() {
+  return (process.env.RETRIEVAL_QUERY_REWRITE_ENABLED ?? "true")
+    .trim()
+    .toLowerCase() !== "false";
 }

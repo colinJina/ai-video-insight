@@ -4,9 +4,13 @@ import { normalizeWhitespace } from "@/lib/analysis/utils";
 const MIN_CHUNK_LENGTH = 320;
 const TARGET_CHUNK_LENGTH = 900;
 const MAX_CHUNK_LENGTH = 1200;
+const CHUNK_OVERLAP_SEGMENTS = 1;
 
 type ChunkAccumulator = {
-  texts: string[];
+  segments: Array<{
+    segment: TranscriptSegment;
+    text: string;
+  }>;
   startSeconds: number | null;
   endSeconds: number | null;
   length: number;
@@ -14,7 +18,7 @@ type ChunkAccumulator = {
 
 function createAccumulator(): ChunkAccumulator {
   return {
-    texts: [],
+    segments: [],
     startSeconds: null,
     endSeconds: null,
     length: 0,
@@ -25,7 +29,9 @@ function toChunk(
   accumulator: ChunkAccumulator,
   chunkIndex: number,
 ): TranscriptChunk | null {
-  const text = normalizeWhitespace(accumulator.texts.join(" "));
+  const text = normalizeWhitespace(
+    accumulator.segments.map((entry) => entry.text).join(" "),
+  );
   if (!text) {
     return null;
   }
@@ -43,7 +49,10 @@ function appendSegment(
   segment: TranscriptSegment,
   text: string,
 ) {
-  accumulator.texts.push(text);
+  accumulator.segments.push({
+    segment,
+    text,
+  });
   accumulator.length += text.length;
   if (accumulator.startSeconds === null) {
     accumulator.startSeconds = segment.startSeconds;
@@ -54,6 +63,19 @@ function appendSegment(
   } else if (segment.startSeconds !== null) {
     accumulator.endSeconds = segment.startSeconds;
   }
+}
+
+function createOverlapAccumulator(
+  accumulator: ChunkAccumulator,
+): ChunkAccumulator {
+  const overlapEntries = accumulator.segments.slice(-CHUNK_OVERLAP_SEGMENTS);
+  const nextAccumulator = createAccumulator();
+
+  for (const entry of overlapEntries) {
+    appendSegment(nextAccumulator, entry.segment, entry.text);
+  }
+
+  return nextAccumulator;
 }
 
 export function chunkTranscriptSegments(
@@ -78,7 +100,7 @@ export function chunkTranscriptSegments(
       if (chunk) {
         chunks.push(chunk);
       }
-      accumulator = createAccumulator();
+      accumulator = createOverlapAccumulator(accumulator);
     }
 
     appendSegment(accumulator, segment, text);
@@ -88,7 +110,7 @@ export function chunkTranscriptSegments(
       if (chunk) {
         chunks.push(chunk);
       }
-      accumulator = createAccumulator();
+      accumulator = createOverlapAccumulator(accumulator);
     }
   }
 

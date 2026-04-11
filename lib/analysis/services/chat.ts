@@ -3,17 +3,31 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/analysis/errors";
+import {
+  getRetrievalCandidateLimit,
+  getRetrievalFinalLimit,
+  getRetrievalNeighborWindow,
+  getRetrievalScoreThreshold,
+  isRetrievalQueryRewriteEnabled,
+} from "@/lib/analysis/env";
 import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
 import {
   getAnalysisRepository,
   toPublicAnalysisTask,
 } from "@/lib/analysis/repository";
-import { createAssistantMessage, createUserMessage } from "@/lib/analysis/services/messages";
+import {
+  createAssistantMessage,
+  createUserMessage,
+} from "@/lib/analysis/services/messages";
+import { chunkTranscriptSegments } from "@/lib/analysis/transcript-chunking";
 import { getTranscriptChunkRepository } from "@/lib/analysis/transcript-chunk-repository";
 import type {
+  AnalysisChatCitation,
   AnalysisChatMessage,
   AnalysisChatContextPayload,
+  AnalysisChatRetrievalDebug,
   AnalysisChatRuntimeState,
+  TranscriptChunk,
   TranscriptChunkMatch,
   AnalysisTask,
   AnalysisPublicTask,
@@ -32,12 +46,27 @@ import {
   trimText,
 } from "@/lib/analysis/utils";
 
-const RETRIEVED_CHUNK_LIMIT = 4;
+const RECENT_MESSAGE_LIMIT = 6;
+const RETRIEVAL_CANDIDATE_LIMIT = getRetrievalCandidateLimit();
+const RETRIEVAL_FINAL_LIMIT = getRetrievalFinalLimit();
+const RETRIEVAL_NEIGHBOR_WINDOW = getRetrievalNeighborWindow();
+const RETRIEVAL_SCORE_THRESHOLD = getRetrievalScoreThreshold();
+
+type RetrievalSelection = {
+  matches: TranscriptChunkMatch[];
+  debug: AnalysisChatRetrievalDebug;
+};
+
+type AnalysisChatContextBuildResult = {
+  payload: AnalysisChatContextPayload;
+  retrievalDebug: AnalysisChatRetrievalDebug;
+  citations: AnalysisChatCitation[];
+};
 
 function toPythonChatMessages(
   messages: AnalysisChatMessage[],
 ): PythonChatRequest["recentMessages"] {
-  return messages.slice(-6).map((message) => ({
+  return messages.slice(-RECENT_MESSAGE_LIMIT).map((message) => ({
     role: message.role,
     content: message.content,
   }));
@@ -109,14 +138,14 @@ function buildRequestDrivenMemoryItems(
   return memoryItems;
 }
 
+function sortMatchesByChunkIndex(matches: TranscriptChunkMatch[]) {
+  return [...matches].sort((left, right) => left.chunkIndex - right.chunkIndex);
+}
+
 function buildRetrievedChunkMemoryItems(
   matches: TranscriptChunkMatch[],
 ): PythonChatMemoryItem[] {
-  const sortedMatches = [...matches].sort(
-    (left, right) => left.chunkIndex - right.chunkIndex,
-  );
-
-  return sortedMatches.map((match) => ({
+  return sortMatchesByChunkIndex(matches).map((match) => ({
     kind: "retrieved_chunk",
     content: match.text,
     source: "analysis.transcript_chunks",
@@ -129,15 +158,9 @@ function buildRetrievedChunkMemoryItems(
   }));
 }
 
-function buildRetrievedTranscriptExcerpt(
-  matches: TranscriptChunkMatch[],
-) {
-  const sortedMatches = [...matches].sort(
-    (left, right) => left.chunkIndex - right.chunkIndex,
-  );
-
+function buildRetrievedTranscriptExcerpt(matches: TranscriptChunkMatch[]) {
   return trimText(
-    sortedMatches
+    sortMatchesByChunkIndex(matches)
       .map((match) =>
         hasUsableTimestamp(match.startSeconds)
           ? `[${formatTimestamp(match.startSeconds)}] ${match.text}`
@@ -148,31 +171,205 @@ function buildRetrievedTranscriptExcerpt(
   );
 }
 
+function buildCitations(matches: TranscriptChunkMatch[]): AnalysisChatCitation[] {
+  return sortMatchesByChunkIndex(matches).map((match) => ({
+    chunkIndex: match.chunkIndex,
+    text: match.text,
+    score: Number(match.score.toFixed(6)),
+    startSeconds: match.startSeconds,
+    endSeconds: match.endSeconds,
+  }));
+}
+
+function tokenizeForOverlap(value: string) {
+  return normalizeWhitespace(value)
+    .toLowerCase()
+    .split(/[^a-z0-9\u4e00-\u9fff]+/u)
+    .filter((token) => token.length >= 3);
+}
+
+function buildRetrievalQuery(
+  task: AnalysisTask,
+  recentMessages: AnalysisChatMessage[],
+  latestMessage: string,
+) {
+  if (!isRetrievalQueryRewriteEnabled()) {
+    return latestMessage;
+  }
+
+  const previousUserMessages = recentMessages
+    .filter((message) => message.role === "user" && message.content !== latestMessage)
+    .slice(-2)
+    .map((message) => message.content);
+  const latestTokens = tokenizeForOverlap(latestMessage);
+  const isShortQuestion = latestTokens.length <= 5;
+  const usesImplicitReference = /\b(it|this|that|they|them|these|those|why|how)\b/i.test(
+    latestMessage,
+  );
+
+  if (!isShortQuestion && !usesImplicitReference) {
+    return latestMessage;
+  }
+
+  const queryParts = [
+    ...previousUserMessages.slice(-1),
+    task.result?.summary ?? "",
+    latestMessage,
+  ]
+    .map((part) => normalizeWhitespace(part))
+    .filter(Boolean);
+
+  if (queryParts.length <= 1) {
+    return latestMessage;
+  }
+
+  return normalizeWhitespace(queryParts.join(" "));
+}
+
+function computeLexicalScore(query: string, text: string) {
+  const queryTokens = new Set(tokenizeForOverlap(query));
+  if (queryTokens.size === 0) {
+    return 0;
+  }
+
+  const textTokens = new Set(tokenizeForOverlap(text));
+  let overlap = 0;
+
+  queryTokens.forEach((token) => {
+    if (textTokens.has(token)) {
+      overlap += 1;
+    }
+  });
+
+  return overlap / queryTokens.size;
+}
+
+function rerankMatches(
+  query: string,
+  matches: TranscriptChunkMatch[],
+) {
+  return matches
+    .map((match) => ({
+      match,
+      combinedScore:
+        match.score * 0.7 + computeLexicalScore(query, match.text) * 0.3,
+    }))
+    .filter((entry) => entry.combinedScore >= RETRIEVAL_SCORE_THRESHOLD)
+    .sort((left, right) => right.combinedScore - left.combinedScore)
+    .slice(0, RETRIEVAL_FINAL_LIMIT)
+    .map((entry) => ({
+      ...entry.match,
+      score: Number(entry.combinedScore.toFixed(6)),
+    }));
+}
+
+function expandNeighborMatches(
+  task: AnalysisTask,
+  matches: TranscriptChunkMatch[],
+) {
+  if (matches.length === 0 || !task.transcript || RETRIEVAL_NEIGHBOR_WINDOW <= 0) {
+    return matches;
+  }
+
+  const allChunks = chunkTranscriptSegments(task.transcript.segments);
+  const chunkByIndex = new Map<number, TranscriptChunk>();
+  const matchByIndex = new Map<number, TranscriptChunkMatch>();
+
+  allChunks.forEach((chunk) => {
+    chunkByIndex.set(chunk.chunkIndex, chunk);
+  });
+  matches.forEach((match) => {
+    matchByIndex.set(match.chunkIndex, match);
+  });
+
+  for (const match of matches) {
+    for (
+      let offset = -RETRIEVAL_NEIGHBOR_WINDOW;
+      offset <= RETRIEVAL_NEIGHBOR_WINDOW;
+      offset += 1
+    ) {
+      if (offset === 0) {
+        continue;
+      }
+
+      const neighborIndex = match.chunkIndex + offset;
+      if (matchByIndex.has(neighborIndex)) {
+        continue;
+      }
+
+      const neighborChunk = chunkByIndex.get(neighborIndex);
+      if (!neighborChunk) {
+        continue;
+      }
+
+      matchByIndex.set(neighborIndex, {
+        id: `${task.id}:${neighborChunk.chunkIndex}`,
+        analysisId: task.id,
+        userId: task.userId,
+        chunkIndex: neighborChunk.chunkIndex,
+        text: neighborChunk.text,
+        startSeconds: neighborChunk.startSeconds,
+        endSeconds: neighborChunk.endSeconds,
+        score: Number(Math.max(match.score - 0.08, 0.01).toFixed(6)),
+      });
+    }
+  }
+
+  return sortMatchesByChunkIndex([...matchByIndex.values()]);
+}
+
 async function retrieveTranscriptMatches(
   task: AnalysisTask,
-  message: string,
-) {
+  recentMessages: AnalysisChatMessage[],
+  latestMessage: string,
+): Promise<RetrievalSelection> {
+  const rewrittenQuery = buildRetrievalQuery(task, recentMessages, latestMessage);
+  const fallbackDebug: AnalysisChatRetrievalDebug = {
+    rewrittenQuery,
+    candidateCount: 0,
+    selectedCount: 0,
+    fallbackUsed: true,
+  };
   const embeddingProvider = createEmbeddingProvider();
   if (!embeddingProvider.isConfigured()) {
-    return [];
+    return {
+      matches: [],
+      debug: fallbackDebug,
+    };
   }
 
   const repository = getTranscriptChunkRepository();
 
   try {
-    const queryEmbedding = await embeddingProvider.embedText(message);
-    return await repository.matchForAnalysis({
+    const queryEmbedding = await embeddingProvider.embedText(rewrittenQuery);
+    const candidateMatches = await repository.matchForAnalysis({
       analysisId: task.id,
       userId: task.userId,
       queryEmbedding,
-      limit: RETRIEVED_CHUNK_LIMIT,
+      limit: RETRIEVAL_CANDIDATE_LIMIT,
     });
+    const rerankedMatches = rerankMatches(rewrittenQuery, candidateMatches);
+    const expandedMatches = expandNeighborMatches(task, rerankedMatches);
+
+    return {
+      matches: expandedMatches,
+      debug: {
+        rewrittenQuery,
+        candidateCount: candidateMatches.length,
+        selectedCount: expandedMatches.length,
+        fallbackUsed: false,
+      },
+    };
   } catch (error) {
     console.warn(
       `[analysis] Transcript retrieval failed for analysis ${task.id}. Falling back to static transcript excerpt.`,
       error,
     );
-    return [];
+
+    return {
+      matches: [],
+      debug: fallbackDebug,
+    };
   }
 }
 
@@ -181,37 +378,48 @@ async function buildAnalysisChatContext(
   task: AnalysisTask,
   recentMessages: AnalysisChatMessage[],
   latestMessage: string,
-): Promise<AnalysisChatContextPayload> {
+): Promise<AnalysisChatContextBuildResult> {
   if (!task.result || !task.transcript) {
     throw new ConflictError(
       "Wait for the video analysis to complete before sending chat messages.",
     );
   }
 
-  const retrievedMatches = await retrieveTranscriptMatches(task, latestMessage);
-  const retrievedMemoryItems = buildRetrievedChunkMemoryItems(retrievedMatches);
-  const transcriptExcerpt =
-    retrievedMatches.length > 0
-      ? buildRetrievedTranscriptExcerpt(retrievedMatches)
-      : buildTranscriptExcerpt(task.transcript.segments, 2400);
+  const retrieval = await retrieveTranscriptMatches(
+    task,
+    recentMessages,
+    latestMessage,
+  );
+  const retrievedMemoryItems = buildRetrievedChunkMemoryItems(retrieval.matches);
+  const transcriptExcerpt = retrieval.matches.length > 0
+    ? buildRetrievedTranscriptExcerpt(retrieval.matches)
+    : retrieval.debug.fallbackUsed
+      ? buildTranscriptExcerpt(task.transcript.segments, 2400)
+      : null;
 
   return {
-    userId: task.userId,
-    analysisId: id,
-    analysisSummary: task.result.summary,
-    transcriptExcerpt,
-    outline: task.result.outline,
-    keyPoints: task.result.keyPoints,
-    recentMessages,
-    memoryItems: [
-      ...buildRequestDrivenMemoryItems(task),
-      ...retrievedMemoryItems,
-    ],
+    payload: {
+      userId: task.userId,
+      analysisId: id,
+      analysisSummary: task.result.summary,
+      transcriptExcerpt,
+      outline: task.result.outline,
+      keyPoints: task.result.keyPoints,
+      recentMessages,
+      memoryItems: [
+        ...buildRequestDrivenMemoryItems(task),
+        ...retrievedMemoryItems,
+      ],
+    },
+    retrievalDebug: retrieval.debug,
+    citations: buildCitations(retrieval.matches),
   };
 }
 
 function buildChatRuntimeState(
   pythonResponse: Awaited<ReturnType<typeof requestPythonChatAnswer>>,
+  retrievalDebug: AnalysisChatRetrievalDebug,
+  citations: AnalysisChatCitation[],
 ): AnalysisChatRuntimeState {
   return {
     memoryHits: pythonResponse.memoryHits,
@@ -222,6 +430,8 @@ function buildChatRuntimeState(
       source: item.source,
       metadata: item.metadata,
     })),
+    citations,
+    retrievalDebug,
   };
 }
 
@@ -254,7 +464,7 @@ export async function chatOnAnalysis(
   );
   const pythonRequest = buildPythonChatRequest(
     userMessage.content,
-    context,
+    context.payload,
   );
   const pythonResponse = await requestPythonChatAnswer(pythonRequest);
 
@@ -272,6 +482,10 @@ export async function chatOnAnalysis(
 
   return {
     ...toPublicAnalysisTask(updatedTask),
-    chatRuntime: buildChatRuntimeState(pythonResponse),
+    chatRuntime: buildChatRuntimeState(
+      pythonResponse,
+      context.retrievalDebug,
+      context.citations,
+    ),
   };
 }

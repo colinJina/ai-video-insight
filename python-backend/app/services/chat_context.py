@@ -92,9 +92,13 @@ class ChatContextBuilder:
             )
             sections.append(f"Outline:\n{rendered_outline}")
 
-        if memory_items:
+        prompt_memory_items = [
+            item for item in memory_items if item.kind != "retrieved_chunk"
+        ]
+
+        if prompt_memory_items:
             rendered_memory = "\n".join(
-                f"- [{item.kind}] {item.content}" for item in memory_items
+                f"- [{item.kind}] {item.content}" for item in prompt_memory_items
             )
             sections.append(f"Memory items:\n{rendered_memory}")
 

@@ -109,10 +109,27 @@ export interface AnalysisChatMemorySnapshot {
   metadata?: Record<string, unknown>;
 }
 
+export interface AnalysisChatCitation {
+  chunkIndex: number;
+  text: string;
+  score: number;
+  startSeconds: number | null;
+  endSeconds: number | null;
+}
+
+export interface AnalysisChatRetrievalDebug {
+  rewrittenQuery: string;
+  candidateCount: number;
+  selectedCount: number;
+  fallbackUsed: boolean;
+}
+
 export interface AnalysisChatRuntimeState {
   memoryHits: string[];
   conversationSummary: string | null;
   memoryItems: AnalysisChatMemorySnapshot[];
+  citations: AnalysisChatCitation[];
+  retrievalDebug: AnalysisChatRetrievalDebug;
 }
 
 export interface StructuredVideoSummary {
