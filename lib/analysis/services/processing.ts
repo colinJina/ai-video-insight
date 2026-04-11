@@ -64,7 +64,11 @@ export async function processAnalysisTask(id: string) {
   const repository = getAnalysisRepository();
   const existing = await repository.findById(id);
 
-  if (!existing || existing.status === "completed" || existing.status === "failed") {
+  if (
+    !existing ||
+    existing.status === "completed" ||
+    existing.status === "failed"
+  ) {
     return;
   }
 
@@ -91,6 +95,7 @@ export async function processAnalysisTask(id: string) {
         video: latestTask.video,
         transcript,
       });
+      // console.log("structuredSumary", structuredSummary);
       const result = buildAnalysisResult(structuredSummary);
       const introMessage = createAssistantMessage(result.chatContext.intro);
 
@@ -143,7 +148,8 @@ export async function processAnalysisTask(id: string) {
     await repository.update(id, {
       status: "failed",
       transcriptSource:
-        transcriptProvider.kind === "mock" || error instanceof ExternalServiceError
+        transcriptProvider.kind === "mock" ||
+        error instanceof ExternalServiceError
           ? transcriptProvider.kind
           : null,
       errorMessage: buildProcessingErrorMessage(
