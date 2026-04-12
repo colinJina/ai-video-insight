@@ -117,8 +117,9 @@ const VideoSection = ({
                 No Poster Yet
               </p>
               <p className="mt-3 text-sm leading-7 text-(--text-muted)">
-                We can still analyze the video even when poster artwork is missing. This panel will
-                update as soon as artwork becomes available.
+                We can still analyze the video even when poster artwork is
+                missing. This panel will update as soon as artwork becomes
+                available.
               </p>
             </div>
           </div>
@@ -170,7 +171,7 @@ const VideoSection = ({
               value={videoUrl}
             />
             <button
-              className="rounded-xl bg-linear-to-br from-primary to-(--primary-strong) px-6 py-3 font-headline text-xs font-bold uppercase tracking-[0.24em] text-(--on-primary) transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:scale-100"
+              className="rounded-xl cursor-pointer bg-linear-to-br from-primary to-(--primary-strong) px-6 py-3 font-headline text-xs font-bold uppercase tracking-[0.24em] text-(--on-primary) transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:scale-100"
               disabled={isBusy}
               type="submit"
             >
@@ -185,26 +186,35 @@ const VideoSection = ({
             >
               Local MP4 Upload
             </label>
-            <input
-              accept="video/mp4,.mp4"
-              className="mt-3 block w-full rounded-xl border border-[rgba(88,66,53,0.3)] bg-[rgba(23,12,3,0.8)] px-4 py-3 text-sm text-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-[rgba(255,127,0,0.16)] file:px-3 file:py-2 file:font-headline file:text-xs file:font-bold file:uppercase file:tracking-[0.18em] file:text-primary"
-              id="dashboard-video-file"
-              key={fileInputKey}
-              onChange={onVideoFileChange}
-              type="file"
-            />
+            <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[rgba(88,66,53,0.3)] bg-[rgba(23,12,3,0.8)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <input
+                accept="video/mp4,.mp4"
+                className="sr-only"
+                id="dashboard-video-file"
+                key={fileInputKey}
+                onChange={onVideoFileChange}
+                type="file"
+              />
+              <label
+                className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-[rgba(255,127,0,0.16)] px-3 py-2 font-headline text-xs font-bold uppercase tracking-[0.18em] text-primary transition-colors hover:bg-[rgba(255,127,0,0.22)]"
+                htmlFor="dashboard-video-file"
+              >
+                Choose File
+              </label>
+              <p className="min-w-0 text-sm text-(--text-muted) sm:flex-1">
+                <span className="block truncate">
+                  {selectedFileName ?? "No file selected"}
+                </span>
+              </p>
+            </div>
             <p className="mt-2 text-xs leading-6 text-(--text-muted)">
-              {selectedFileName
-                ? `Selected file: ${selectedFileName}`
-                : "Choose a local MP4 file if you do not want to paste a public URL."}
+              Choose a local MP4 file if you do not want to paste a public URL.
             </p>
           </div>
 
           <p
             className={`mt-3 text-sm leading-7 ${
-              status === "error"
-                ? "text-[#ff9b9b]"
-                : "text-(--text-muted)"
+              status === "error" ? "text-[#ff9b9b]" : "text-(--text-muted)"
             }`}
           >
             {statusMessage}
