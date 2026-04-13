@@ -236,6 +236,9 @@ export async function requestPythonChatAnswer(
     memoryItems: parseMemoryItems(
       Array.isArray(body.memoryItems) ? body.memoryItems : body.memory_items,
     ),
+    memoryUpdates: parseMemoryItems(
+      Array.isArray(body.memoryUpdates) ? body.memoryUpdates : body.memory_updates,
+    ),
     memoryHits: parseStringArray(
       Array.isArray(body.memoryHits) ? body.memoryHits : body.memory_hits,
     ),

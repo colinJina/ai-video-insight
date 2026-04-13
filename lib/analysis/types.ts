@@ -91,10 +91,17 @@ export interface AnalysisChatContextPayload {
   analysisId: string;
   analysisSummary: string | null;
   transcriptExcerpt: string | null;
+  storedConversationSummary: string | null;
   outline: OutlineItem[];
   keyPoints: string[];
   recentMessages: AnalysisChatMessage[];
   memoryItems: {
+    kind: string;
+    content: string;
+    source?: string | null;
+    metadata?: Record<string, unknown>;
+  }[];
+  storedMemoryItems: {
     kind: string;
     content: string;
     source?: string | null;
@@ -107,6 +114,17 @@ export interface AnalysisChatMemorySnapshot {
   content: string;
   source?: string | null;
   metadata?: Record<string, unknown>;
+}
+
+export interface AnalysisStoredMemoryItem extends AnalysisChatMemorySnapshot {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalysisChatState {
+  conversationSummary: string | null;
+  memoryItems: AnalysisStoredMemoryItem[];
 }
 
 export interface AnalysisChatCitation {
@@ -142,6 +160,7 @@ export interface StructuredVideoSummary {
 
 export interface AnalysisResult extends StructuredVideoSummary {
   chatContext: AnalysisChatContext;
+  chatState: AnalysisChatState;
 }
 
 export interface AnalysisTask {

@@ -41,16 +41,19 @@ export interface PythonChatRequest {
   analysisId: string;
   analysisSummary: string | null;
   transcriptExcerpt: string | null;
+  storedConversationSummary: string | null;
   outline: PythonChatOutlineItem[];
   keyPoints: string[];
   message: string;
   recentMessages: PythonChatMessage[];
   memoryItems: PythonChatMemoryItem[];
+  storedMemoryItems: PythonChatMemoryItem[];
 }
 
 export interface PythonChatResponse {
   answer: string;
   memoryItems: PythonChatMemoryItem[];
+  memoryUpdates: PythonChatMemoryItem[];
   memoryHits: string[];
   conversationSummary: string | null;
 }

@@ -168,5 +168,9 @@ export function buildAnalysisResult(summary: StructuredVideoSummary): AnalysisRe
           ? summary.suggestedQuestions
           : buildDefaultQuestions(summary.title),
     },
+    chatState: {
+      conversationSummary: null,
+      memoryItems: [],
+    },
   };
 }

@@ -27,6 +27,7 @@ import type {
   AnalysisChatContextPayload,
   AnalysisChatRetrievalDebug,
   AnalysisChatRuntimeState,
+  AnalysisStoredMemoryItem,
   TranscriptChunk,
   TranscriptChunkMatch,
   AnalysisTask,
@@ -46,11 +47,12 @@ import {
   trimText,
 } from "@/lib/analysis/utils";
 
-const RECENT_MESSAGE_LIMIT = 6;
+const RECENT_MESSAGE_LIMIT = 8;
 const RETRIEVAL_CANDIDATE_LIMIT = getRetrievalCandidateLimit();
 const RETRIEVAL_FINAL_LIMIT = getRetrievalFinalLimit();
 const RETRIEVAL_NEIGHBOR_WINDOW = getRetrievalNeighborWindow();
 const RETRIEVAL_SCORE_THRESHOLD = getRetrievalScoreThreshold();
+const STORED_MEMORY_LIMIT = 4;
 
 type RetrievalSelection = {
   matches: TranscriptChunkMatch[];
@@ -81,11 +83,13 @@ function buildPythonChatRequest(
     analysisId: context.analysisId,
     analysisSummary: context.analysisSummary,
     transcriptExcerpt: context.transcriptExcerpt,
+    storedConversationSummary: context.storedConversationSummary,
     outline: context.outline,
     keyPoints: context.keyPoints,
     message,
     recentMessages: toPythonChatMessages(context.recentMessages),
     memoryItems: context.memoryItems,
+    storedMemoryItems: context.storedMemoryItems,
   };
 }
 
@@ -136,6 +140,126 @@ function buildRequestDrivenMemoryItems(
   });
 
   return memoryItems;
+}
+
+function getChatState(task: AnalysisTask) {
+  return task.result?.chatState ?? {
+    conversationSummary: null,
+    memoryItems: [],
+  };
+}
+
+function normalizeMemoryText(value: string) {
+  return normalizeWhitespace(value).toLowerCase();
+}
+
+function readMemoryImportance(item: {
+  metadata?: Record<string, unknown>;
+}) {
+  const importance = item.metadata?.importance;
+  if (typeof importance === "number" && Number.isFinite(importance)) {
+    return Math.min(Math.max(importance, 0), 1);
+  }
+
+  return 0.5;
+}
+
+function scoreStoredMemoryItem(query: string, item: AnalysisStoredMemoryItem) {
+  return computeLexicalScore(query, item.content) * 0.7 + readMemoryImportance(item) * 0.3;
+}
+
+function recallStoredMemoryItems(
+  task: AnalysisTask,
+  query: string,
+): PythonChatMemoryItem[] {
+  const storedItems = getChatState(task).memoryItems;
+  if (storedItems.length === 0) {
+    return [];
+  }
+
+  const ranked = storedItems
+    .map((item) => ({
+      item,
+      score: scoreStoredMemoryItem(query, item),
+    }))
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      return right.item.updatedAt.localeCompare(left.item.updatedAt);
+    });
+
+  const selected = ranked.some((entry) => entry.score > 0)
+    ? ranked.filter((entry) => entry.score > 0).slice(0, STORED_MEMORY_LIMIT)
+    : ranked.slice(0, Math.min(2, STORED_MEMORY_LIMIT));
+
+  return selected.map(({ item, score }) => ({
+    kind: item.kind,
+    content: item.content,
+    source: item.source,
+    metadata: {
+      ...item.metadata,
+      recalledFrom: "analysis.result.chatState.memoryItems",
+      recallScore: Number(score.toFixed(6)),
+    },
+  }));
+}
+
+function mergeStoredMemoryItems(
+  existingItems: AnalysisStoredMemoryItem[],
+  updates: PythonChatMemoryItem[],
+) {
+  if (updates.length === 0) {
+    return existingItems;
+  }
+
+  const now = new Date().toISOString();
+  const merged = new Map<string, AnalysisStoredMemoryItem>();
+
+  for (const item of existingItems) {
+    merged.set(`${item.kind.toLowerCase()}::${normalizeMemoryText(item.content)}`, item);
+  }
+
+  for (const update of updates) {
+    const key = `${update.kind.toLowerCase()}::${normalizeMemoryText(update.content)}`;
+    const current = merged.get(key);
+
+    if (current) {
+      merged.set(key, {
+        ...current,
+        source: update.source ?? current.source ?? null,
+        metadata: {
+          ...(current.metadata ?? {}),
+          ...(update.metadata ?? {}),
+          importance: Math.max(readMemoryImportance(current), readMemoryImportance(update)),
+        },
+        updatedAt: now,
+      });
+      continue;
+    }
+
+    merged.set(key, {
+      id: crypto.randomUUID(),
+      kind: update.kind,
+      content: update.content,
+      source: update.source ?? null,
+      metadata: update.metadata ?? {},
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return [...merged.values()]
+    .sort((left, right) => {
+      const importanceDiff = readMemoryImportance(right) - readMemoryImportance(left);
+      if (importanceDiff !== 0) {
+        return importanceDiff;
+      }
+
+      return right.updatedAt.localeCompare(left.updatedAt);
+    })
+    .slice(0, 12);
 }
 
 function sortMatchesByChunkIndex(matches: TranscriptChunkMatch[]) {
@@ -390,6 +514,7 @@ async function buildAnalysisChatContext(
     recentMessages,
     latestMessage,
   );
+  const storedMemoryItems = recallStoredMemoryItems(task, retrieval.debug.rewrittenQuery);
   const retrievedMemoryItems = buildRetrievedChunkMemoryItems(retrieval.matches);
   const transcriptExcerpt = retrieval.matches.length > 0
     ? buildRetrievedTranscriptExcerpt(retrieval.matches)
@@ -403,6 +528,7 @@ async function buildAnalysisChatContext(
       analysisId: id,
       analysisSummary: task.result.summary,
       transcriptExcerpt,
+      storedConversationSummary: getChatState(task).conversationSummary,
       outline: task.result.outline,
       keyPoints: task.result.keyPoints,
       recentMessages,
@@ -410,6 +536,7 @@ async function buildAnalysisChatContext(
         ...buildRequestDrivenMemoryItems(task),
         ...retrievedMemoryItems,
       ],
+      storedMemoryItems,
     },
     retrievalDebug: retrieval.debug,
     citations: buildCitations(retrieval.matches),
@@ -432,6 +559,27 @@ function buildChatRuntimeState(
     })),
     citations,
     retrievalDebug,
+  };
+}
+
+function buildUpdatedAnalysisResult(
+  task: AnalysisTask,
+  pythonResponse: Awaited<ReturnType<typeof requestPythonChatAnswer>>,
+) {
+  if (!task.result) {
+    return task.result;
+  }
+
+  return {
+    ...task.result,
+    chatState: {
+      conversationSummary:
+        pythonResponse.conversationSummary ?? getChatState(task).conversationSummary,
+      memoryItems: mergeStoredMemoryItems(
+        getChatState(task).memoryItems,
+        pythonResponse.memoryUpdates,
+      ),
+    },
   };
 }
 
@@ -471,10 +619,10 @@ export async function chatOnAnalysis(
   const assistantMessage = createAssistantMessage(
     trimText(pythonResponse.answer, 480),
   );
-  const updatedTask = await repository.appendChatMessages(id, [
-    userMessage,
-    assistantMessage,
-  ]);
+  const updatedTask = await repository.update(id, {
+    chatMessages: [...task.chatMessages, userMessage, assistantMessage],
+    result: buildUpdatedAnalysisResult(task, pythonResponse),
+  });
 
   if (!updatedTask) {
     throw new NotFoundError("Could not find the requested analysis task.");

@@ -9,6 +9,7 @@ class ChatResponseGenerator:
         context: ChatContext,
         memory_items: list[ChatMemoryItem],
         model_answer: str | None = None,
+        memory_updates: list[ChatMemoryItem] | None = None,
     ) -> ChatResponse:
         answer = (model_answer or "").strip() or self._build_fallback_answer(
             context,
@@ -18,6 +19,7 @@ class ChatResponseGenerator:
         return ChatResponse(
             answer=answer,
             memory_items=memory_items,
+            memory_updates=memory_updates or [],
             memory_hits=context.memory_hits,
             conversation_summary=context.conversation_summary,
         )

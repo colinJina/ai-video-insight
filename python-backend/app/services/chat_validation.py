@@ -22,11 +22,15 @@ class ChatInputSanitizer:
             analysis_id=self._clean_optional_text(request.analysis_id),
             analysis_summary=self._clean_optional_text(request.analysis_summary),
             transcript_excerpt=self._clean_optional_text(request.transcript_excerpt),
+            stored_conversation_summary=self._clean_optional_text(
+                request.stored_conversation_summary
+            ),
             outline=self._sanitize_outline(request.outline),
             key_points=self._sanitize_key_points(request.key_points),
             message=message,
             recent_messages=recent_messages,
             memory_items=self._sanitize_memory_items(request.memory_items),
+            stored_memory_items=self._sanitize_memory_items(request.stored_memory_items),
         )
 
     def _sanitize_recent_messages(

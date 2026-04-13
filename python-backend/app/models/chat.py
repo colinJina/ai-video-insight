@@ -60,6 +60,10 @@ class ChatRequest(ChatModel):
         default=None,
         description="Relevant transcript excerpt passed from the frontend.",
     )
+    stored_conversation_summary: str | None = Field(
+        default=None,
+        description="Persisted rolling conversation summary from earlier turns.",
+    )
     outline: list[ChatOutlineItem] = Field(
         default_factory=list,
         description="Structured outline items from the current video analysis result.",
@@ -77,11 +81,16 @@ class ChatRequest(ChatModel):
         default_factory=list,
         description="Preloaded memory snippets or retrieval results for this chat turn.",
     )
+    stored_memory_items: list[ChatMemoryItem] = Field(
+        default_factory=list,
+        description="Persisted long-term memory items recalled from earlier turns.",
+    )
 
 
 class ChatResponse(ChatModel):
     answer: str
     memory_items: list[ChatMemoryItem] = Field(default_factory=list)
+    memory_updates: list[ChatMemoryItem] = Field(default_factory=list)
     memory_hits: list[str] = Field(default_factory=list)
     conversation_summary: str | None = None
 
@@ -91,11 +100,13 @@ class SanitizedChatInput(ChatModel):
     analysis_id: str | None = Field(default=None)
     analysis_summary: str | None = Field(default=None)
     transcript_excerpt: str | None = Field(default=None)
+    stored_conversation_summary: str | None = Field(default=None)
     outline: list[ChatOutlineItem] = Field(default_factory=list)
     key_points: list[str] = Field(default_factory=list)
     message: str = Field(min_length=1)
     recent_messages: list[ChatMessage] = Field(default_factory=list)
     memory_items: list[ChatMemoryItem] = Field(default_factory=list)
+    stored_memory_items: list[ChatMemoryItem] = Field(default_factory=list)
 
 
 class ChatContext(ChatModel):

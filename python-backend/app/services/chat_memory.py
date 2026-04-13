@@ -19,8 +19,7 @@ class ChatMemoryLoader:
     def _load_stored_memory(
         self, chat_input: SanitizedChatInput
     ) -> list[ChatMemoryItem]:
-        _ = chat_input
-        return []
+        return chat_input.stored_memory_items
 
     def _build_memory_hit(self, item: ChatMemoryItem, index: int) -> str:
         source = item.source or "request.memory_items"

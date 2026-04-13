@@ -1,4 +1,5 @@
 from app.models.chat import ChatMessage, SanitizedChatInput
+from app.services.chat_model import ChatModelGateway
 
 
 class ConversationSummarizer:
@@ -13,43 +14,85 @@ class ConversationSummarizer:
         self.retained_recent_messages = retained_recent_messages
 
     def summarize(
-        self, chat_input: SanitizedChatInput
+        self,
+        chat_input: SanitizedChatInput,
+        model_gateway: ChatModelGateway | None = None,
     ) -> tuple[list[ChatMessage], str | None, bool]:
         recent_messages = chat_input.recent_messages
+        stored_summary = chat_input.stored_conversation_summary
 
-        if len(recent_messages) <= self.compression_threshold:
+        if len(recent_messages) <= self.compression_threshold and not stored_summary:
             return recent_messages, None, False
+
+        if len(recent_messages) <= self.retained_recent_messages:
+            return recent_messages, stored_summary, bool(stored_summary)
 
         retained_messages = recent_messages[-self.retained_recent_messages :]
         compressed_messages = recent_messages[: -self.retained_recent_messages]
         conversation_summary = self._build_summary(
+            previous_summary=stored_summary,
             compressed_messages=compressed_messages,
-            retained_messages=retained_messages,
+            model_gateway=model_gateway,
         )
-        return retained_messages, conversation_summary, True
+        return retained_messages, conversation_summary, bool(conversation_summary)
+
+    def finalize_turn_summary(
+        self,
+        chat_input: SanitizedChatInput,
+        assistant_answer: str,
+        current_summary: str | None,
+        model_gateway: ChatModelGateway | None = None,
+    ) -> str | None:
+        if (
+            not current_summary
+            and not chat_input.stored_conversation_summary
+            and len(chat_input.recent_messages) < self.compression_threshold
+        ):
+            return None
+
+        turn_messages = [
+            ChatMessage(role="user", content=chat_input.message),
+            ChatMessage(role="assistant", content=assistant_answer),
+        ]
+
+        return self._build_summary(
+            previous_summary=current_summary or chat_input.stored_conversation_summary,
+            compressed_messages=turn_messages,
+            model_gateway=model_gateway,
+        )
 
     def _build_summary(
         self,
+        previous_summary: str | None,
         compressed_messages: list[ChatMessage],
-        retained_messages: list[ChatMessage],
+        model_gateway: ChatModelGateway | None = None,
     ) -> str:
+        if model_gateway:
+            try:
+                llm_summary = model_gateway.generate_conversation_summary(
+                    previous_summary,
+                    compressed_messages,
+                )
+            except Exception:
+                llm_summary = None
+
+            if llm_summary:
+                return llm_summary
+
         compressed_count = len(compressed_messages)
         speaker_counts = self._count_speakers(compressed_messages)
         key_points = self._extract_key_points(compressed_messages)
-        latest_retained = retained_messages[-1].content if retained_messages else ""
 
         sections = [
-            f"Compressed {compressed_count} earlier messages.",
-            f"Speaker mix: {speaker_counts}.",
+            f"Rolling summary base: {previous_summary}." if previous_summary else "",
+            f"Compressed {compressed_count} earlier messages." if compressed_messages else "",
+            f"Speaker mix: {speaker_counts}." if compressed_messages else "",
         ]
 
         if key_points:
             sections.append(f"Earlier discussion highlights: {'; '.join(key_points)}.")
 
-        if latest_retained:
-            sections.append(f"Most recent retained turn: {latest_retained}.")
-
-        return " ".join(sections)
+        return " ".join(section for section in sections if section)
 
     def _count_speakers(self, messages: list[ChatMessage]) -> str:
         user_count = sum(1 for message in messages if message.role == "user")
