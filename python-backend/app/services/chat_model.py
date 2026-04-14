@@ -4,6 +4,7 @@ from urllib import error, request
 from app.core.config import get_settings
 from app.core.exceptions import ServiceUnavailableError
 from app.models.chat import ChatContext, ChatMemoryItem, ChatMessage
+from app.services.chat_langchain_adapter import LangChainChatModelAdapter
 
 
 def _resolve_chat_completions_url(base_url: str) -> str:
@@ -129,7 +130,7 @@ def _normalize_memory_items(payload: object) -> list[ChatMemoryItem]:
 
 
 class ChatModelGateway:
-    """OpenAI-compatible chat gateway backed by the existing AI_* config."""
+    """Keeps the chat pipeline stable while swapping model adapters by config."""
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -137,11 +138,31 @@ class ChatModelGateway:
         self.api_key = settings.ai_api_key or ""
         self.model = settings.ai_model or ""
         self.timeout_seconds = max(settings.ai_timeout_ms, 1000) / 1000
+        explicit_adapter = (settings.chat_model_adapter or "").strip().lower()
+        self.adapter_name = (
+            explicit_adapter
+            if explicit_adapter in {"http", "langchain"}
+            else "langchain"
+            if settings.langchain_enabled
+            else "http"
+        )
         self.endpoint = (
             _resolve_chat_completions_url(self.base_url) if self.base_url else ""
         )
+        self.langchain_adapter = LangChainChatModelAdapter(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model=self.model,
+            timeout_seconds=self.timeout_seconds,
+        )
 
     def generate(self, context: ChatContext) -> str | None:
+        if self._uses_langchain_adapter():
+            return self.langchain_adapter.generate(
+                self._build_system_prompt(),
+                self._build_user_prompt(context),
+            )
+
         if not self._is_configured():
             return None
 
@@ -169,6 +190,12 @@ class ChatModelGateway:
         previous_summary: str | None,
         compressed_messages: list[ChatMessage],
     ) -> str | None:
+        if self._uses_langchain_adapter():
+            return self.langchain_adapter.generate_conversation_summary(
+                previous_summary,
+                compressed_messages,
+            )
+
         if not self._is_configured():
             return None
 
@@ -211,6 +238,13 @@ class ChatModelGateway:
         answer: str,
         existing_memory_items: list[ChatMemoryItem],
     ) -> list[ChatMemoryItem]:
+        if self._uses_langchain_adapter():
+            return self.langchain_adapter.extract_memory_items(
+                context,
+                answer,
+                existing_memory_items,
+            )
+
         if not self._is_configured():
             return []
 
@@ -249,6 +283,9 @@ class ChatModelGateway:
 
     def _is_configured(self) -> bool:
         return bool(self.endpoint and self.api_key and self.model)
+
+    def _uses_langchain_adapter(self) -> bool:
+        return self.adapter_name == "langchain"
 
     def _request_completion(
         self,

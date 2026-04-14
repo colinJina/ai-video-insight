@@ -40,4 +40,6 @@ def root() -> dict[str, str]:
         "docs": "/docs",
         "version": settings.app_version,
         "chat_provider": settings.chat_provider,
+        "chat_model_adapter": settings.chat_model_adapter
+        or ("langchain" if settings.langchain_enabled else "http"),
     }

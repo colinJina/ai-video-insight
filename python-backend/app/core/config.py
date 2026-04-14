@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     chat_provider: str = Field(default="stub", alias="CHAT_PROVIDER")
     langchain_enabled: bool = Field(default=False, alias="LANGCHAIN_ENABLED")
+    chat_model_adapter: str | None = Field(default=None, alias="CHAT_MODEL_ADAPTER")
     ai_base_url: str | None = Field(default=None, alias="AI_BASE_URL")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
     ai_model: str | None = Field(default=None, alias="AI_MODEL")

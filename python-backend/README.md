@@ -16,7 +16,7 @@ The goal is to keep the service easy to explain, easy to extend, and ready for f
 - structured application logging
 - unified exception handling with consistent JSON error responses
 - modular service layer for chat, memory hooks, and PDF generation
-- clear extension point for future LangChain or custom LLM integration
+- switchable model adapter layer for direct HTTP or LangChain-backed model calls
 
 ## Project Structure
 
@@ -96,13 +96,19 @@ ALLOWED_ORIGINS=http://localhost:3000
 LOG_LEVEL=INFO
 CHAT_PROVIDER=stub
 LANGCHAIN_ENABLED=false
+CHAT_MODEL_ADAPTER=http
+AI_BASE_URL=
+AI_API_KEY=
+AI_MODEL=
+AI_TIMEOUT_MS=25000
 ```
 
 Notes:
 
 - `LOG_LEVEL` controls application logging verbosity.
 - `CHAT_PROVIDER` is a simple label exposed by the root endpoint so you can show which chat backend is active.
-- `LANGCHAIN_ENABLED` is currently only a configuration placeholder for future integration work.
+- `CHAT_MODEL_ADAPTER` accepts `http` or `langchain`. If omitted, the backend falls back to `LANGCHAIN_ENABLED=true` and otherwise uses `http`.
+- The LangChain adapter reuses the same `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, and `AI_TIMEOUT_MS` settings as the direct HTTP adapter.
 
 ## API Overview
 
@@ -243,19 +249,20 @@ Current logging behavior:
 
 This is intentionally minimal, but it is enough to demonstrate that the service is observable and debuggable.
 
-## LangChain Extension Point
+## LangChain Adapter Layer
 
-The file [app/services/chat_model.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_model.py) is the current placeholder for future LLM orchestration.
+The files [app/services/chat_model.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_model.py) and [app/services/chat_langchain_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langchain_adapter.py) now provide a switchable model adapter layer.
 
-Planned upgrade path:
+Current behavior:
 
-1. Replace `ChatModelGateway.generate(...)` with a LangChain chain or custom model adapter.
-2. Keep request validation, memory loading, context assembly, and response shaping unchanged.
-3. Reuse the same `ChatService` orchestration flow.
+1. `ChatService` still calls `ChatModelGateway` for answer generation, summary compression, and memory extraction.
+2. `ChatModelGateway` selects either the direct `http` path or the `langchain` adapter from configuration.
+3. Request validation, memory loading, context assembly, and response shaping stay unchanged.
 
-This keeps the future integration story simple:
+This keeps the integration story simple:
 
 - input validation stays separate
 - memory loading stays replaceable
 - context building stays deterministic
 - model invocation stays isolated behind one gateway
+- LangChain can be introduced without rewriting the chat pipeline
