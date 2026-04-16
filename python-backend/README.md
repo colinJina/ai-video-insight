@@ -82,6 +82,22 @@ Copy-Item .env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
+## Tests
+
+The backend uses `pytest` for lightweight unit testing.
+
+Run the test suite from `python-backend/`:
+
+```powershell
+python -m pytest
+```
+
+Run a single test file:
+
+```powershell
+python -m pytest tests\test_chat_model_gateway.py
+```
+
 ## Environment Variables
 
 These settings are loaded from `.env` through `app/core/config.py`.
