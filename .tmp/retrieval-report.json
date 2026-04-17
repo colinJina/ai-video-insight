@@ -1,0 +1,355 @@
+{
+  "datasetPath": "C:\\Users\\31744\\Desktop\\ai-video-insight\\scripts\\my-retrieval-eval.json",
+  "generatedAt": "2026-04-17T09:27:56.888Z",
+  "analysisId": "814e5ae1-14b4-4735-9bd0-fc1be52d2cbf",
+  "userId": "5025b506-42a6-4184-bfd8-4185b65b145c",
+  "topK": [
+    1,
+    2,
+    3,
+    5
+  ],
+  "warnings": [],
+  "summary": {
+    "dense": {
+      "queryCount": 5,
+      "mrr": 1,
+      "metrics": {
+        "recall@1": 1,
+        "hit@1": 1,
+        "recall@2": 1,
+        "hit@2": 1,
+        "recall@3": 1,
+        "hit@3": 1,
+        "recall@5": 1,
+        "hit@5": 1
+      }
+    },
+    "sparse": {
+      "queryCount": 5,
+      "mrr": 0,
+      "metrics": {
+        "recall@1": 0,
+        "hit@1": 0,
+        "recall@2": 0,
+        "hit@2": 0,
+        "recall@3": 0,
+        "hit@3": 0,
+        "recall@5": 0,
+        "hit@5": 0
+      }
+    },
+    "hybrid": {
+      "queryCount": 5,
+      "mrr": 1,
+      "metrics": {
+        "recall@1": 1,
+        "hit@1": 1,
+        "recall@2": 1,
+        "hit@2": 1,
+        "recall@3": 1,
+        "hit@3": 1,
+        "recall@5": 1,
+        "hit@5": 1
+      }
+    }
+  },
+  "queries": [
+    {
+      "id": "telomere-role",
+      "query": "端粒是什么，它在细胞里起什么作用？",
+      "expectedChunkIndexes": [
+        0
+      ],
+      "metadataFilter": null,
+      "methods": {
+        "dense": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        },
+        "sparse": {
+          "topChunkIndexes": [],
+          "mrr": 0,
+          "metrics": {
+            "recall@1": 0,
+            "hit@1": 0,
+            "recall@2": 0,
+            "hit@2": 0,
+            "recall@3": 0,
+            "hit@3": 0,
+            "recall@5": 0,
+            "hit@5": 0
+          }
+        },
+        "hybrid": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "telomere-shortening",
+      "query": "端粒为什么会缩短，缩短后会带来什么影响？",
+      "expectedChunkIndexes": [
+        0
+      ],
+      "metadataFilter": null,
+      "methods": {
+        "dense": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        },
+        "sparse": {
+          "topChunkIndexes": [],
+          "mrr": 0,
+          "metrics": {
+            "recall@1": 0,
+            "hit@1": 0,
+            "recall@2": 0,
+            "hit@2": 0,
+            "recall@3": 0,
+            "hit@3": 0,
+            "recall@5": 0,
+            "hit@5": 0
+          }
+        },
+        "hybrid": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "healthy-lifestyle",
+      "query": "健康生活方式和端粒长度有什么关系？",
+      "expectedChunkIndexes": [
+        0
+      ],
+      "metadataFilter": null,
+      "methods": {
+        "dense": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        },
+        "sparse": {
+          "topChunkIndexes": [],
+          "mrr": 0,
+          "metrics": {
+            "recall@1": 0,
+            "hit@1": 0,
+            "recall@2": 0,
+            "hit@2": 0,
+            "recall@3": 0,
+            "hit@3": 0,
+            "recall@5": 0,
+            "hit@5": 0
+          }
+        },
+        "hybrid": {
+          "topChunkIndexes": [
+            0,
+            1
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "opening-section",
+      "query": "视频开头主要讲了什么？",
+      "expectedChunkIndexes": [
+        0
+      ],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 45,
+        "label": "opening_section"
+      },
+      "methods": {
+        "dense": {
+          "topChunkIndexes": [
+            0
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        },
+        "sparse": {
+          "topChunkIndexes": [],
+          "mrr": 0,
+          "metrics": {
+            "recall@1": 0,
+            "hit@1": 0,
+            "recall@2": 0,
+            "hit@2": 0,
+            "recall@3": 0,
+            "hit@3": 0,
+            "recall@5": 0,
+            "hit@5": 0
+          }
+        },
+        "hybrid": {
+          "topChunkIndexes": [
+            0
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ending-wish",
+      "query": "视频结尾表达了什么愿望？",
+      "expectedChunkIndexes": [
+        1
+      ],
+      "metadataFilter": {
+        "startSeconds": 120,
+        "endSeconds": 127,
+        "label": "ending_section"
+      },
+      "methods": {
+        "dense": {
+          "topChunkIndexes": [
+            1,
+            0
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        },
+        "sparse": {
+          "topChunkIndexes": [],
+          "mrr": 0,
+          "metrics": {
+            "recall@1": 0,
+            "hit@1": 0,
+            "recall@2": 0,
+            "hit@2": 0,
+            "recall@3": 0,
+            "hit@3": 0,
+            "recall@5": 0,
+            "hit@5": 0
+          }
+        },
+        "hybrid": {
+          "topChunkIndexes": [
+            1,
+            0
+          ],
+          "mrr": 1,
+          "metrics": {
+            "recall@1": 1,
+            "hit@1": 1,
+            "recall@2": 1,
+            "hit@2": 1,
+            "recall@3": 1,
+            "hit@3": 1,
+            "recall@5": 1,
+            "hit@5": 1
+          }
+        }
+      }
+    }
+  ]
+}

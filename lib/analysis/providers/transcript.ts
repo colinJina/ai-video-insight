@@ -14,6 +14,7 @@ import {
   hasUsableTimestamp,
   isRecord,
   normalizeDurationSeconds,
+  normalizeTranscriptText,
   normalizeWhitespace,
   sleep,
   trimText,
@@ -93,7 +94,7 @@ function normalizeTranscriptSegment(value: unknown): TranscriptSegment | null {
         : typeof value.content === "string"
           ? value.content
           : "";
-  const text = normalizeWhitespace(rawText);
+  const text = normalizeTranscriptText(rawText);
 
   if (!text) {
     return null;
@@ -184,14 +185,15 @@ function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse 
       }
 
       const text = typeof item.text === "string" ? normalizeWhitespace(item.text) : "";
-      if (!text) {
+      const normalizedText = normalizeTranscriptText(text);
+      if (!normalizedText) {
         return null;
       }
 
       return {
         startSeconds: millisecondsToSeconds(item.start),
         endSeconds: millisecondsToSeconds(item.end),
-        text,
+        text: normalizedText,
       } satisfies TranscriptSegment;
     })
     .filter((segment): segment is TranscriptSegment => segment !== null);
@@ -210,8 +212,8 @@ function normalizeAssemblyAiPayload(payload: unknown): RemoteTranscriptResponse 
   }
 
   const fullText =
-    typeof payload.text === "string" && normalizeWhitespace(payload.text)
-      ? normalizeWhitespace(payload.text)
+    typeof payload.text === "string" && normalizeTranscriptText(payload.text)
+      ? normalizeTranscriptText(payload.text)
       : segments.map((segment) => segment.text).join(" ");
   const language =
     typeof payload.language_code === "string" && normalizeWhitespace(payload.language_code)

@@ -25,6 +25,13 @@ export function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+export function normalizeTranscriptText(value: string) {
+  return normalizeWhitespace(value)
+    .replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/gu, "$1")
+    .replace(/([\u3400-\u9fff])\s+(?=[，。！？；：、）】》」』])/gu, "$1")
+    .replace(/([（【《「『])\s+(?=[\u3400-\u9fff])/gu, "$1");
+}
+
 export function trimText(value: string, maxLength: number) {
   const normalized = normalizeWhitespace(value);
   if (normalized.length <= maxLength) {

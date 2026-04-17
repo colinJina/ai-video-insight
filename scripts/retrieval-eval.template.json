@@ -1,0 +1,26 @@
+{
+  "analysisId": "replace-with-analysis-id",
+  "userId": "replace-with-user-id",
+  "topK": [1, 3, 5],
+  "denseLimit": 12,
+  "sparseLimit": 10,
+  "queries": [
+    {
+      "id": "concept-question",
+      "query": "为什么 chunking 会影响检索效果？",
+      "expectedChunkIndexes": [4, 5],
+      "notes": "把你认为最相关的 chunk_index 填进来。"
+    },
+    {
+      "id": "time-filter-question",
+      "query": "开头 3 分钟主要讲了什么？",
+      "expectedChunkIndexes": [0, 1],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 180,
+        "label": "leading_window:opening_3m"
+      },
+      "notes": "需要时间范围过滤的题目，可以手动写 metadataFilter。"
+    }
+  ]
+}

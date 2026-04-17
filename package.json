@@ -8,7 +8,8 @@
     "dev:turbo": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "eval:retrieval": "node scripts/retrieval-eval.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.3",

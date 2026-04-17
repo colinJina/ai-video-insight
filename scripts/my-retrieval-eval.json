@@ -1,0 +1,49 @@
+{
+  "analysisId": "814e5ae1-14b4-4735-9bd0-fc1be52d2cbf",
+  "userId": "5025b506-42a6-4184-bfd8-4185b65b145c",
+  "topK": [1, 2, 3, 5],
+  "denseLimit": 12,
+  "sparseLimit": 10,
+  "queries": [
+    {
+      "id": "telomere-role",
+      "query": "端粒是什么，它在细胞里起什么作用？",
+      "expectedChunkIndexes": [0],
+      "notes": "核心概念题，应该命中主体介绍 chunk。"
+    },
+    {
+      "id": "telomere-shortening",
+      "query": "端粒为什么会缩短，缩短后会带来什么影响？",
+      "expectedChunkIndexes": [0],
+      "notes": "机制解释题，仍然应该命中主体内容 chunk。"
+    },
+    {
+      "id": "healthy-lifestyle",
+      "query": "健康生活方式和端粒长度有什么关系？",
+      "expectedChunkIndexes": [0],
+      "notes": "围绕 summary 和 key points 里的生活方式内容做验证。"
+    },
+    {
+      "id": "opening-section",
+      "query": "视频开头主要讲了什么？",
+      "expectedChunkIndexes": [0],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 45,
+        "label": "opening_section"
+      },
+      "notes": "这是 metadata filter 示例题，限定在开头 45 秒。"
+    },
+    {
+      "id": "ending-wish",
+      "query": "视频结尾表达了什么愿望？",
+      "expectedChunkIndexes": [1],
+      "metadataFilter": {
+        "startSeconds": 120,
+        "endSeconds": 127,
+        "label": "ending_section"
+      },
+      "notes": "这是结尾题，应该更偏向最后一个短 chunk。"
+    }
+  ]
+}
