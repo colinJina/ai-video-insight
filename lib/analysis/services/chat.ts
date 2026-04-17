@@ -5,12 +5,21 @@ import {
 } from "@/lib/analysis/errors";
 import {
   getRetrievalCandidateLimit,
+  getRetrievalDenseWeight,
   getRetrievalFinalLimit,
+  getRetrievalLexicalWeight,
   getRetrievalNeighborWindow,
   getRetrievalScoreThreshold,
+  getRetrievalSparseCandidateLimit,
+  getRetrievalSparseWeight,
   isRetrievalQueryRewriteEnabled,
 } from "@/lib/analysis/env";
 import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
+import {
+  computeLexicalScore,
+  normalizeScores,
+  tokenizeRetrievalText,
+} from "@/lib/analysis/retrieval";
 import {
   getAnalysisRepository,
   toPublicAnalysisTask,
@@ -49,10 +58,35 @@ import {
 
 const RECENT_MESSAGE_LIMIT = 8;
 const RETRIEVAL_CANDIDATE_LIMIT = getRetrievalCandidateLimit();
+const RETRIEVAL_SPARSE_CANDIDATE_LIMIT = getRetrievalSparseCandidateLimit();
 const RETRIEVAL_FINAL_LIMIT = getRetrievalFinalLimit();
 const RETRIEVAL_NEIGHBOR_WINDOW = getRetrievalNeighborWindow();
 const RETRIEVAL_SCORE_THRESHOLD = getRetrievalScoreThreshold();
 const STORED_MEMORY_LIMIT = 4;
+const RETRIEVAL_WEIGHT_CONFIG = {
+  dense: getRetrievalDenseWeight(),
+  sparse: getRetrievalSparseWeight(),
+  lexical: getRetrievalLexicalWeight(),
+};
+
+function normalizeFusionWeights(weights: typeof RETRIEVAL_WEIGHT_CONFIG) {
+  const total = weights.dense + weights.sparse + weights.lexical;
+  if (total <= 0) {
+    return {
+      dense: 1 / 3,
+      sparse: 1 / 3,
+      lexical: 1 / 3,
+    };
+  }
+
+  return {
+    dense: weights.dense / total,
+    sparse: weights.sparse / total,
+    lexical: weights.lexical / total,
+  };
+}
+
+const RETRIEVAL_FUSION_WEIGHTS = normalizeFusionWeights(RETRIEVAL_WEIGHT_CONFIG);
 
 type RetrievalSelection = {
   matches: TranscriptChunkMatch[];
@@ -305,13 +339,6 @@ function buildCitations(matches: TranscriptChunkMatch[]): AnalysisChatCitation[]
   }));
 }
 
-function tokenizeForOverlap(value: string) {
-  return normalizeWhitespace(value)
-    .toLowerCase()
-    .split(/[^a-z0-9\u4e00-\u9fff]+/u)
-    .filter((token) => token.length >= 3);
-}
-
 function buildRetrievalQuery(
   task: AnalysisTask,
   recentMessages: AnalysisChatMessage[],
@@ -325,7 +352,7 @@ function buildRetrievalQuery(
     .filter((message) => message.role === "user" && message.content !== latestMessage)
     .slice(-2)
     .map((message) => message.content);
-  const latestTokens = tokenizeForOverlap(latestMessage);
+  const latestTokens = tokenizeRetrievalText(latestMessage);
   const isShortQuestion = latestTokens.length <= 5;
   const usesImplicitReference = /\b(it|this|that|they|them|these|those|why|how)\b/i.test(
     latestMessage,
@@ -350,41 +377,56 @@ function buildRetrievalQuery(
   return normalizeWhitespace(queryParts.join(" "));
 }
 
-function computeLexicalScore(query: string, text: string) {
-  const queryTokens = new Set(tokenizeForOverlap(query));
-  if (queryTokens.size === 0) {
-    return 0;
-  }
+function fuseRetrievedMatches(
+  query: string,
+  denseMatches: TranscriptChunkMatch[],
+  sparseMatches: TranscriptChunkMatch[],
+) {
+  const denseEntries = normalizeScores(denseMatches);
+  const sparseEntries = normalizeScores(sparseMatches);
+  const denseById = new Map(denseEntries.map((entry) => [entry.id, entry]));
+  const sparseById = new Map(sparseEntries.map((entry) => [entry.id, entry]));
+  const allMatches = new Map<string, TranscriptChunkMatch>();
 
-  const textTokens = new Set(tokenizeForOverlap(text));
-  let overlap = 0;
-
-  queryTokens.forEach((token) => {
-    if (textTokens.has(token)) {
-      overlap += 1;
-    }
+  denseMatches.forEach((match) => {
+    allMatches.set(match.id, match);
+  });
+  sparseMatches.forEach((match) => {
+    allMatches.set(match.id, match);
   });
 
-  return overlap / queryTokens.size;
-}
+  // Weighted fusion keeps semantic recall while letting exact terminology lift relevant chunks.
+  const fused = [...allMatches.values()]
+    .map((match) => {
+      const denseScore = denseById.get(match.id)?.normalizedScore ?? 0;
+      const sparseScore = sparseById.get(match.id)?.normalizedScore ?? 0;
+      const lexicalScore = computeLexicalScore(query, match.text);
+      const combinedScore =
+        denseScore * RETRIEVAL_FUSION_WEIGHTS.dense +
+        sparseScore * RETRIEVAL_FUSION_WEIGHTS.sparse +
+        lexicalScore * RETRIEVAL_FUSION_WEIGHTS.lexical;
 
-function rerankMatches(
-  query: string,
-  matches: TranscriptChunkMatch[],
-) {
-  return matches
-    .map((match) => ({
-      match,
-      combinedScore:
-        match.score * 0.7 + computeLexicalScore(query, match.text) * 0.3,
-    }))
-    .filter((entry) => entry.combinedScore >= RETRIEVAL_SCORE_THRESHOLD)
-    .sort((left, right) => right.combinedScore - left.combinedScore)
+      return {
+        match,
+        combinedScore,
+      };
+    })
+    .sort((left, right) => right.combinedScore - left.combinedScore);
+
+  const filtered = fused.filter(
+    (entry) => entry.combinedScore >= RETRIEVAL_SCORE_THRESHOLD,
+  );
+  const selected = (filtered.length > 0 ? filtered : fused)
     .slice(0, RETRIEVAL_FINAL_LIMIT)
     .map((entry) => ({
       ...entry.match,
       score: Number(entry.combinedScore.toFixed(6)),
     }));
+
+  return {
+    selected,
+    candidateCount: fused.length,
+  };
 }
 
 function expandNeighborMatches(
@@ -448,14 +490,21 @@ async function retrieveTranscriptMatches(
   latestMessage: string,
 ): Promise<RetrievalSelection> {
   const rewrittenQuery = buildRetrievalQuery(task, recentMessages, latestMessage);
+  const embeddingProvider = createEmbeddingProvider();
+  const vectorSearchEnabled = embeddingProvider.isConfigured();
+  const lexicalSearchEnabled = tokenizeRetrievalText(rewrittenQuery).length > 0;
   const fallbackDebug: AnalysisChatRetrievalDebug = {
     rewrittenQuery,
-    candidateCount: 0,
+    denseCandidateCount: 0,
+    sparseCandidateCount: 0,
+    hybridCandidateCount: 0,
     selectedCount: 0,
     fallbackUsed: true,
+    vectorSearchEnabled,
+    lexicalSearchEnabled,
+    fusionStrategy: "dense_sparse_weighted",
   };
-  const embeddingProvider = createEmbeddingProvider();
-  if (!embeddingProvider.isConfigured()) {
+  if (!vectorSearchEnabled && !lexicalSearchEnabled) {
     return {
       matches: [],
       debug: fallbackDebug,
@@ -463,25 +512,63 @@ async function retrieveTranscriptMatches(
   }
 
   const repository = getTranscriptChunkRepository();
+  let denseMatches: TranscriptChunkMatch[] = [];
+  let sparseMatches: TranscriptChunkMatch[] = [];
 
   try {
-    const queryEmbedding = await embeddingProvider.embedText(rewrittenQuery);
-    const candidateMatches = await repository.matchForAnalysis({
-      analysisId: task.id,
-      userId: task.userId,
-      queryEmbedding,
-      limit: RETRIEVAL_CANDIDATE_LIMIT,
-    });
-    const rerankedMatches = rerankMatches(rewrittenQuery, candidateMatches);
-    const expandedMatches = expandNeighborMatches(task, rerankedMatches);
+    if (vectorSearchEnabled) {
+      try {
+        const queryEmbedding = await embeddingProvider.embedText(rewrittenQuery);
+        denseMatches = await repository.matchForAnalysis({
+          analysisId: task.id,
+          userId: task.userId,
+          queryEmbedding,
+          limit: RETRIEVAL_CANDIDATE_LIMIT,
+        });
+      } catch (error) {
+        console.warn(
+          `[analysis] Dense transcript retrieval failed for analysis ${task.id}.`,
+          error,
+        );
+      }
+    }
+
+    if (lexicalSearchEnabled) {
+      try {
+        sparseMatches = await repository.searchForAnalysis({
+          analysisId: task.id,
+          userId: task.userId,
+          queryText: rewrittenQuery,
+          limit: RETRIEVAL_SPARSE_CANDIDATE_LIMIT,
+        });
+      } catch (error) {
+        console.warn(
+          `[analysis] Sparse transcript retrieval failed for analysis ${task.id}.`,
+          error,
+        );
+      }
+    }
+
+    const fusedSelection = fuseRetrievedMatches(
+      rewrittenQuery,
+      denseMatches,
+      sparseMatches,
+    );
+    const expandedMatches = expandNeighborMatches(task, fusedSelection.selected);
+    const fallbackUsed = expandedMatches.length === 0;
 
     return {
       matches: expandedMatches,
       debug: {
         rewrittenQuery,
-        candidateCount: candidateMatches.length,
+        denseCandidateCount: denseMatches.length,
+        sparseCandidateCount: sparseMatches.length,
+        hybridCandidateCount: fusedSelection.candidateCount,
         selectedCount: expandedMatches.length,
-        fallbackUsed: false,
+        fallbackUsed,
+        vectorSearchEnabled,
+        lexicalSearchEnabled,
+        fusionStrategy: "dense_sparse_weighted",
       },
     };
   } catch (error) {

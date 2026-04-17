@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { computeSparseScores } from "@/lib/analysis/retrieval";
 import { isSupabaseRepositoryConfigured } from "@/lib/supabase/env";
 import { shouldFallbackToMemoryRepository } from "@/lib/supabase/repository-fallback";
 import { isSupabaseBackedUserId } from "@/lib/supabase/user-id";
@@ -27,10 +28,20 @@ type MatchTranscriptChunksInput = {
   limit: number;
 };
 
+type SearchTranscriptChunksInput = {
+  analysisId: string;
+  userId: string;
+  queryText: string;
+  limit: number;
+};
+
 export interface TranscriptChunkRepository {
   replaceForAnalysis(input: UpsertTranscriptChunksInput): Promise<void>;
   matchForAnalysis(
     input: MatchTranscriptChunksInput,
+  ): Promise<TranscriptChunkMatch[]>;
+  searchForAnalysis(
+    input: SearchTranscriptChunksInput,
   ): Promise<TranscriptChunkMatch[]>;
 }
 
@@ -130,6 +141,29 @@ class MemoryTranscriptChunkRepository implements TranscriptChunkRepository {
       .slice(0, limit)
       .map(cloneValue);
   }
+
+  async searchForAnalysis({
+    analysisId,
+    userId,
+    queryText,
+    limit,
+  }: SearchTranscriptChunksInput) {
+    const records = transcriptChunkStore.get(analysisId) ?? [];
+    const scoredRecords = computeSparseScores(
+      queryText,
+      records
+        .filter((record) => record.userId === userId)
+        .map((record) => ({
+          item: record,
+          text: record.text,
+        })),
+    );
+
+    return scoredRecords
+      .slice(0, limit)
+      .map(({ item, score }) => mapChunkRecordToMatch(item, score))
+      .map(cloneValue);
+  }
 }
 
 class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
@@ -204,6 +238,39 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
       score: coerceOptionalNumber(row.score) ?? 0,
     }));
   }
+
+  async searchForAnalysis({
+    analysisId,
+    userId,
+    queryText,
+    limit,
+  }: SearchTranscriptChunksInput) {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.rpc(
+      "search_analysis_transcript_chunks",
+      {
+        filter_analysis_id: analysisId,
+        filter_user_id: userId,
+        query_text: queryText,
+        match_count: limit,
+      },
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      analysisId: row.analysis_id,
+      userId: row.user_id,
+      chunkIndex: row.chunk_index,
+      text: row.text,
+      startSeconds: coerceOptionalNumber(row.start_seconds),
+      endSeconds: coerceOptionalNumber(row.end_seconds),
+      score: coerceOptionalNumber(row.score) ?? 0,
+    }));
+  }
 }
 
 const memoryRepository = new MemoryTranscriptChunkRepository();
@@ -257,6 +324,15 @@ const repository: TranscriptChunkRepository = {
       "matchForAnalysis",
       () => memoryRepository.matchForAnalysis(input),
       useSupabase ? () => supabaseRepository.matchForAnalysis(input) : null,
+    );
+  },
+  searchForAnalysis(input) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(input.userId);
+
+    return runChunkRepositoryOperation(
+      "searchForAnalysis",
+      () => memoryRepository.searchForAnalysis(input),
+      useSupabase ? () => supabaseRepository.searchForAnalysis(input) : null,
     );
   },
 };

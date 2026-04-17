@@ -144,6 +144,24 @@ export interface Database {
           score: number;
         }>;
       };
+      search_analysis_transcript_chunks: {
+        Args: {
+          filter_analysis_id: string;
+          filter_user_id: string;
+          query_text: string;
+          match_count?: number;
+        };
+        Returns: Array<{
+          id: string;
+          analysis_id: string;
+          user_id: string;
+          chunk_index: number;
+          text: string;
+          start_seconds: number | null;
+          end_seconds: number | null;
+          score: number;
+        }>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

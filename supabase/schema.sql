@@ -70,6 +70,10 @@ create index if not exists analysis_transcript_chunks_embedding_idx
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
 
+create index if not exists analysis_transcript_chunks_text_search_idx
+  on public.analysis_transcript_chunks
+  using gin (to_tsvector('simple', text));
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -195,5 +199,54 @@ as $$
   where chunk.analysis_id = filter_analysis_id
     and chunk.user_id = filter_user_id
   order by chunk.embedding <=> query_embedding
+  limit greatest(match_count, 1);
+$$;
+
+create or replace function public.search_analysis_transcript_chunks(
+  filter_analysis_id uuid,
+  filter_user_id uuid,
+  query_text text,
+  match_count integer default 6
+)
+returns table (
+  id uuid,
+  analysis_id uuid,
+  user_id uuid,
+  chunk_index integer,
+  text text,
+  start_seconds numeric,
+  end_seconds numeric,
+  score float
+)
+language sql
+stable
+as $$
+  with normalized_query as (
+    select trim(coalesce(query_text, '')) as value
+  ),
+  search_query as (
+    select
+      case
+        when value = '' then null
+        else websearch_to_tsquery('simple', value)
+      end as terms
+    from normalized_query
+  )
+  select
+    chunk.id,
+    chunk.analysis_id,
+    chunk.user_id,
+    chunk.chunk_index,
+    chunk.text,
+    chunk.start_seconds,
+    chunk.end_seconds,
+    ts_rank_cd(to_tsvector('simple', chunk.text), search_query.terms) as score
+  from public.analysis_transcript_chunks as chunk
+  cross join search_query
+  where chunk.analysis_id = filter_analysis_id
+    and chunk.user_id = filter_user_id
+    and search_query.terms is not null
+    and search_query.terms @@ to_tsvector('simple', chunk.text)
+  order by score desc, chunk.chunk_index asc
   limit greatest(match_count, 1);
 $$;

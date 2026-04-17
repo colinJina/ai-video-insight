@@ -137,9 +137,14 @@ export interface AnalysisChatCitation {
 
 export interface AnalysisChatRetrievalDebug {
   rewrittenQuery: string;
-  candidateCount: number;
+  denseCandidateCount: number;
+  sparseCandidateCount: number;
+  hybridCandidateCount: number;
   selectedCount: number;
   fallbackUsed: boolean;
+  vectorSearchEnabled: boolean;
+  lexicalSearchEnabled: boolean;
+  fusionStrategy: string;
 }
 
 export interface AnalysisChatRuntimeState {
