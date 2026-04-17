@@ -1,0 +1,8 @@
+pre-commit:
+  commands:
+    typecheck:
+      run: npm run typecheck
+    lint:
+      run: npm run lint
+    python-checks:
+      run: npm run check:python

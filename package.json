@@ -4,11 +4,14 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/install-yt-dlp.mjs",
+    "prepare": "lefthook install",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check:python": "node scripts/run-python-checks.mjs",
     "eval:retrieval": "node scripts/retrieval-eval.mjs"
   },
   "dependencies": {
@@ -28,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "lefthook": "^2.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
