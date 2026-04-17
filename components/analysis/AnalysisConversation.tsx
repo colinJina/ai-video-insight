@@ -2,8 +2,16 @@
 
 import { startTransition, useState } from "react";
 
-import type { AnalysisPublicTask } from "@/lib/analysis/types";
-import { isRecord } from "@/lib/analysis/utils";
+import type {
+  AnalysisChatCitation,
+  AnalysisPublicTask,
+} from "@/lib/analysis/types";
+import {
+  formatTimestamp,
+  hasUsableTimestamp,
+  isRecord,
+  trimText,
+} from "@/lib/analysis/utils";
 
 type AnalysisConversationProps = {
   initialAnalysis: AnalysisPublicTask;
@@ -12,6 +20,85 @@ type AnalysisConversationProps = {
 type AnalysisResponse = {
   analysis: AnalysisPublicTask;
 };
+
+function formatCitationWindow(citation: AnalysisChatCitation) {
+  const hasStart = hasUsableTimestamp(citation.startSeconds);
+  const hasEnd = hasUsableTimestamp(citation.endSeconds);
+
+  if (hasStart && hasEnd && citation.startSeconds !== citation.endSeconds) {
+    return `${formatTimestamp(citation.startSeconds)} - ${formatTimestamp(citation.endSeconds)}`;
+  }
+
+  if (hasStart) {
+    return formatTimestamp(citation.startSeconds);
+  }
+
+  if (hasEnd) {
+    return formatTimestamp(citation.endSeconds);
+  }
+
+  return "No timestamp";
+}
+
+function formatCitationScore(score: number) {
+  if (!Number.isFinite(score)) {
+    return null;
+  }
+
+  return score.toFixed(2);
+}
+
+function LatestReplyCitations({
+  citations,
+}: {
+  citations: AnalysisChatCitation[];
+}) {
+  if (citations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-[color:rgba(88,66,53,0.18)] bg-[color:rgba(13,7,1,0.6)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--primary-strong)]">
+          Latest Answer Evidence
+        </p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.58)]">
+          Transcript Chunks
+        </p>
+      </div>
+      <div className="mt-3 space-y-3">
+        {citations.map((citation) => {
+          const scoreLabel = formatCitationScore(citation.score);
+
+          return (
+            <div
+              key={`${citation.chunkIndex}-${citation.startSeconds ?? "none"}-${citation.endSeconds ?? "none"}`}
+              className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(29,17,6,0.42)] px-3 py-2.5"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-primary/25 bg-[color:rgba(255,127,0,0.08)] px-2.5 py-1 font-headline text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  {formatCitationWindow(citation)}
+                </span>
+                <span className="text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.56)]">
+                  Chunk {citation.chunkIndex}
+                </span>
+                {scoreLabel ? (
+                  <span className="text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.56)]">
+                    Score {scoreLabel}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--text-muted)]">
+                {trimText(citation.text, 240)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -55,10 +142,15 @@ export default function AnalysisConversation({
 
   const canContinueChat =
     analysis.status === "completed" && Boolean(analysis.result);
-  const suggestedQuestions =
-    analysis.result?.chatContext.suggestedQuestions.length
-      ? analysis.result.chatContext.suggestedQuestions
-      : analysis.result?.suggestedQuestions ?? [];
+  const suggestedQuestions = analysis.result?.chatContext.suggestedQuestions
+    .length
+    ? analysis.result.chatContext.suggestedQuestions
+    : (analysis.result?.suggestedQuestions ?? []);
+  const latestMessageIndex = analysis.chatMessages.length - 1;
+  const latestAssistantCitations =
+    analysis.chatMessages[latestMessageIndex]?.role === "assistant"
+      ? (analysis.chatRuntime?.citations ?? [])
+      : [];
 
   const handleSend = async (message: string) => {
     const nextMessage = message.trim();
@@ -96,18 +188,27 @@ export default function AnalysisConversation({
   return (
     <div className="mt-5 space-y-5">
       {analysis.chatMessages.length > 0 ? (
-        analysis.chatMessages.map((message) => (
-          <div
-            key={message.id}
-            className={
-              message.role === "assistant"
-                ? "rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4 text-sm leading-7 text-[color:var(--text-muted)]"
-                : "rounded-2xl border border-primary/20 bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-white"
-            }
-          >
-            {message.content}
-          </div>
-        ))
+        analysis.chatMessages.map((message, index) => {
+          const isLatestAssistantReply =
+            message.role === "assistant" && index === latestMessageIndex;
+
+          return (
+            <div key={message.id}>
+              <div
+                className={
+                  message.role === "assistant"
+                    ? "rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4 text-sm leading-7 text-[color:var(--text-muted)]"
+                    : "rounded-2xl border border-primary/20 bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-white"
+                }
+              >
+                {message.content}
+              </div>
+              {isLatestAssistantReply ? (
+                <LatestReplyCitations citations={latestAssistantCitations} />
+              ) : null}
+            </div>
+          );
+        })
       ) : (
         <p className="text-sm leading-7 text-[color:var(--text-muted)]">
           This record does not have any conversation history yet. Start with a
