@@ -24,7 +24,9 @@ export default function RevealOnView({
   ...rest
 }: RevealOnViewProps) {
   const ref = useRef<HTMLElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(
+    () => typeof IntersectionObserver === "undefined",
+  );
 
   useEffect(() => {
     const element = ref.current;
@@ -34,7 +36,6 @@ export default function RevealOnView({
     }
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
       return;
     }
 

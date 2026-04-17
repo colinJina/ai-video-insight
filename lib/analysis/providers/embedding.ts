@@ -54,7 +54,8 @@ class DisabledEmbeddingProvider implements EmbeddingProvider {
     return false;
   }
 
-  async embedText(_: string): Promise<number[]> {
+  async embedText(input: string): Promise<number[]> {
+    void input;
     throw new ExternalServiceError(
       "The embedding service is not configured.",
       true,
