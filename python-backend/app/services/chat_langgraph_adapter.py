@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterable, Sequence
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Protocol, TypedDict, cast
 
 from pydantic import SecretStr
 
@@ -53,6 +53,19 @@ def _format_timestamp(seconds: object) -> str | None:
     minutes = int(seconds // 60)
     remainder = int(seconds % 60)
     return f"{minutes:02d}:{remainder:02d}"
+
+
+class ChatOpenAIConstructor(Protocol):
+    def __call__(
+        self,
+        *,
+        model: str,
+        temperature: float | None = ...,
+        timeout: float | None = ...,
+        max_retries: int | None = ...,
+        api_key: SecretStr | None = ...,
+        base_url: str | None = ...,
+    ) -> Any: ...
 
 
 class LangGraphChatModelAdapter:
@@ -131,8 +144,9 @@ class LangGraphChatModelAdapter:
             add_messages,
             tool,
         ) = self._load_langgraph_components()
+        chat_openai_cls = cast(ChatOpenAIConstructor, ChatOpenAI)
 
-        model = ChatOpenAI(
+        model = chat_openai_cls(
             model=self.model,
             temperature=0.2,
             timeout=self.timeout_seconds,
