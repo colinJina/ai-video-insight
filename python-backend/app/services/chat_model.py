@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterable
 from urllib import error, request
 
 from app.core.config import get_settings
@@ -60,6 +61,25 @@ def _extract_assistant_text(payload: object) -> str:
         return ""
 
     return _read_text_content(message.get("content"))
+
+
+def _extract_stream_delta_text(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        return ""
+
+    delta = first_choice.get("delta")
+    if not isinstance(delta, dict):
+        return ""
+
+    return _read_text_content(delta.get("content"))
 
 
 def _parse_json_object(raw_text: str) -> object:
@@ -184,6 +204,40 @@ class ChatModelGateway:
             )
 
         return answer
+
+    def generate_stream(self, context: ChatContext) -> Iterable[str] | None:
+        system_prompt = self._build_system_prompt()
+        user_prompt = self._build_user_prompt(context)
+
+        if self._uses_langchain_adapter():
+            chunks = self.langchain_adapter.generate_stream(
+                system_prompt,
+                user_prompt,
+            )
+            return chunks if chunks else None
+
+        if not self._is_configured():
+            return None
+
+        try:
+            return self._request_completion_stream(
+                [
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    },
+                ]
+            )
+        except ServiceUnavailableError:
+            fallback_answer = self.generate(context)
+            if not fallback_answer:
+                return None
+
+            return self._chunk_text(fallback_answer)
 
     def generate_conversation_summary(
         self,
@@ -336,6 +390,63 @@ class ChatModelGateway:
 
         return _extract_assistant_text(parsed)
 
+    def _request_completion_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.2,
+    ) -> Iterable[str]:
+        payload = {
+            "model": self.model,
+            "temperature": temperature,
+            "stream": True,
+            "messages": messages,
+        }
+        raw_body = json.dumps(payload).encode("utf-8")
+        http_request = request.Request(
+            self.endpoint,
+            data=raw_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+
+        try:
+            response = request.urlopen(http_request, timeout=self.timeout_seconds)
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise ServiceUnavailableError(
+                self._build_http_error_message(exc.code, detail)
+            ) from exc
+        except error.URLError as exc:
+            raise ServiceUnavailableError(
+                "Could not reach the configured AI chat service."
+            ) from exc
+
+        def iterate_chunks() -> Iterable[str]:
+            with response:
+                for raw_line in response:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+
+                    payload_text = line[len("data:") :].strip()
+                    if payload_text == "[DONE]":
+                        break
+
+                    try:
+                        parsed = json.loads(payload_text)
+                    except json.JSONDecodeError:
+                        continue
+
+                    text = _extract_stream_delta_text(parsed)
+                    if text:
+                        yield text
+
+        return iterate_chunks()
+
     def _build_system_prompt(self) -> str:
         return (
             "You are an AI assistant for a video analysis product. "
@@ -373,6 +484,20 @@ class ChatModelGateway:
                     return message.strip()
 
         return f"The AI service returned status {status_code}."
+
+    def _chunk_text(self, answer: str) -> list[str]:
+        normalized = answer.strip()
+        if not normalized:
+            return []
+
+        chunks: list[str] = []
+        cursor = 0
+
+        while cursor < len(normalized):
+            chunks.append(normalized[cursor : cursor + 24])
+            cursor += 24
+
+        return chunks
 
 
 chat_model_gateway = ChatModelGateway()

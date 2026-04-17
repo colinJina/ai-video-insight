@@ -2,6 +2,7 @@
 
 import { startTransition, useState } from "react";
 
+import { readSseEvents } from "@/lib/analysis/sse";
 import type {
   AnalysisChatCitation,
   AnalysisPublicTask,
@@ -100,38 +101,6 @@ function LatestReplyCitations({
   );
 }
 
-async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
-    cache: "no-store",
-    ...init,
-    headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  let payload: unknown = null;
-
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      isRecord(payload) &&
-      isRecord(payload.error) &&
-      typeof payload.error.message === "string"
-        ? payload.error.message
-        : "Request failed. Please try again.";
-
-    throw new Error(message);
-  }
-
-  return payload as T;
-}
-
 export default function AnalysisConversation({
   initialAnalysis,
 }: AnalysisConversationProps) {
@@ -139,6 +108,10 @@ export default function AnalysisConversation({
   const [draft, setDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(
+    null,
+  );
+  const [streamedAssistantAnswer, setStreamedAssistantAnswer] = useState("");
 
   const canContinueChat =
     analysis.status === "completed" && Boolean(analysis.result);
@@ -160,21 +133,84 @@ export default function AnalysisConversation({
 
     setIsPending(true);
     setChatError(null);
-
+    setPendingUserMessage(nextMessage);
+    setStreamedAssistantAnswer("");
     try {
-      const response = await requestJson<AnalysisResponse>(
-        `/api/analysis/${analysis.id}/chat`,
-        {
-          method: "POST",
-          body: JSON.stringify({ message: nextMessage }),
+      const response = await fetch(`/api/analysis/${analysis.id}/chat`, {
+        cache: "no-store",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({ message: nextMessage }),
+      });
+
+      if (!response.ok) {
+        let payload: unknown = null;
+
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+
+        const errorMessage =
+          isRecord(payload) &&
+          isRecord(payload.error) &&
+          typeof payload.error.message === "string"
+            ? payload.error.message
+            : "Request failed. Please try again.";
+
+        throw new Error(errorMessage);
+      }
+
+      if (!response.body) {
+        throw new Error(
+          "The chat stream did not return a readable response body.",
+        );
+      }
+
+      let nextAnalysis: AnalysisPublicTask | null = null;
+
+      for await (const event of readSseEvents(response.body)) {
+        if (event.event === "token") {
+          const payload = parseStreamEvent<{ content?: string }>(event.data);
+          const content = payload?.content ?? "";
+
+          if (content) {
+            setStreamedAssistantAnswer((current) => current + content);
+          }
+
+          continue;
+        }
+
+        if (event.event === "done") {
+          const payload = parseStreamEvent<AnalysisResponse>(event.data);
+          nextAnalysis = payload?.analysis ?? null;
+          continue;
+        }
+
+        if (event.event === "error") {
+          const payload = parseStreamEvent<{ message?: string }>(event.data);
+          throw new Error(payload?.message ?? "The chat stream failed.");
+        }
+      }
+
+      if (!nextAnalysis) {
+        throw new Error(
+          "The chat stream ended before the final analysis payload arrived.",
+        );
+      }
 
       startTransition(() => {
-        setAnalysis(response.analysis);
+        setAnalysis(nextAnalysis);
         setDraft("");
+        setPendingUserMessage(null);
+        setStreamedAssistantAnswer("");
       });
     } catch (error) {
+      setPendingUserMessage(null);
+      setStreamedAssistantAnswer("");
       setChatError(
         error instanceof Error
           ? error.message
@@ -215,6 +251,19 @@ export default function AnalysisConversation({
           follow-up question below.
         </p>
       )}
+
+      {pendingUserMessage ? (
+        <div className="rounded-2xl border border-primary/20 bg-[color:rgba(255,127,0,0.06)] p-4 text-sm leading-7 text-white">
+          {pendingUserMessage}
+        </div>
+      ) : null}
+
+      {isPending ? (
+        <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4 text-sm leading-7 text-[color:var(--text-muted)]">
+          {streamedAssistantAnswer ||
+            "Thinking through the transcript and assembling an answer..."}
+        </div>
+      ) : null}
 
       {suggestedQuestions.length > 0 ? (
         <div className="space-y-3">
@@ -279,4 +328,12 @@ export default function AnalysisConversation({
       )}
     </div>
   );
+}
+
+function parseStreamEvent<T>(data: string): T | null {
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
 }

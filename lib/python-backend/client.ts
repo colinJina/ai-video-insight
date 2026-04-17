@@ -207,6 +207,63 @@ async function requestPythonBackendBinary(
   };
 }
 
+async function requestPythonBackendStream(
+  options: PythonBackendJsonRequestOptions,
+): Promise<Response> {
+  const {
+    pathname,
+    init,
+    serviceLabel,
+    timeoutMs = getPythonBackendTimeoutMs(),
+  } = options;
+
+  let response: Response;
+
+  try {
+    response = await fetchWithTimeout(
+      buildPythonBackendUrl(pathname),
+      init,
+      timeoutMs,
+    );
+  } catch (error) {
+    if (error instanceof TimeoutError) {
+      throw new TimeoutError(
+        `The ${serviceLabel} timed out. Please try again in a moment.`,
+      );
+    }
+
+    throw new ExternalServiceError(
+      `The ${serviceLabel} is unavailable. Make sure the Python backend is running and ${pathname} is reachable, then try again.`,
+      true,
+    );
+  }
+
+  if (!response.ok) {
+    const rawBody = await response.text();
+    let payload: unknown = null;
+
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      payload = null;
+    }
+
+    throw new ExternalServiceError(
+      readPythonBackendErrorMessage(payload, response.status, serviceLabel),
+      true,
+    );
+  }
+
+  if (!response.body) {
+    throw new ExternalServiceError(
+      `The ${serviceLabel} did not return a readable stream.`,
+      true,
+    );
+  }
+
+  return response;
+}
+
 export async function requestPythonChatAnswer(
   payload: PythonChatRequest,
 ): Promise<PythonChatResponse> {
@@ -249,6 +306,22 @@ export async function requestPythonChatAnswer(
           ? body.conversation_summary
           : null,
   };
+}
+
+export async function requestPythonChatAnswerStream(
+  payload: PythonChatRequest,
+): Promise<Response> {
+  return requestPythonBackendStream({
+    pathname: "/api/chat/respond/stream",
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    serviceLabel: "Python chat stream service",
+  });
 }
 
 export async function requestPythonPdfReport(

@@ -132,6 +132,16 @@ class LangChainChatModelAdapter:
 
         return answer
 
+    def generate_stream(
+        self, system_prompt: str, user_prompt: str
+    ) -> list[str] | None:
+        if not self.is_configured():
+            return None
+
+        return self._invoke_text_stream(
+            [("system", system_prompt), ("user", user_prompt)]
+        )
+
     def generate_conversation_summary(
         self,
         previous_summary: str | None,
@@ -246,6 +256,40 @@ class LangChainChatModelAdapter:
             ) from exc
 
         return _read_text_content(getattr(response, "content", ""))
+
+    def _invoke_text_stream(
+        self,
+        messages: list[tuple[str, str]],
+        *,
+        temperature: float = 0.2,
+    ) -> list[str]:
+        ChatOpenAI, HumanMessage, SystemMessage = self._load_langchain_components()
+        model = ChatOpenAI(
+            model=self.model,
+            temperature=temperature,
+            timeout=self.timeout_seconds,
+            max_retries=2,
+            api_key=SecretStr(self.api_key),
+            base_url=self.base_url,
+        )
+        langchain_messages = [
+            SystemMessage(content=content) if role == "system" else HumanMessage(content=content)
+            for role, content in messages
+        ]
+
+        chunks: list[str] = []
+
+        try:
+            for chunk in model.stream(langchain_messages):
+                text = _read_text_content(getattr(chunk, "content", ""))
+                if text:
+                    chunks.append(text)
+        except Exception as exc:
+            raise ServiceUnavailableError(
+                "The LangChain chat model request failed."
+            ) from exc
+
+        return chunks
 
     def _load_langchain_components(self):
         try:

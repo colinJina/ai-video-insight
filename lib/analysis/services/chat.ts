@@ -48,6 +48,7 @@ import { requestPythonChatAnswer } from "@/lib/python-backend/client";
 import type {
   PythonChatMemoryItem,
   PythonChatRequest,
+  PythonChatResponse,
 } from "@/lib/python-backend/types";
 import {
   buildTranscriptExcerpt,
@@ -98,6 +99,14 @@ type AnalysisChatContextBuildResult = {
   payload: AnalysisChatContextPayload;
   retrievalDebug: AnalysisChatRetrievalDebug;
   citations: AnalysisChatCitation[];
+};
+
+export type PreparedAnalysisChatTurn = {
+  id: string;
+  task: AnalysisTask;
+  userMessage: AnalysisChatMessage;
+  context: AnalysisChatContextBuildResult;
+  pythonRequest: PythonChatRequest;
 };
 
 function resolveTranscriptDurationSeconds(task: AnalysisTask) {
@@ -697,6 +706,16 @@ export async function chatOnAnalysis(
   id: string,
   input: ChatInput,
 ): Promise<AnalysisPublicTask> {
+  const preparedTurn = await prepareAnalysisChatTurn(id, input);
+  const pythonResponse = await requestPythonChatAnswer(preparedTurn.pythonRequest);
+
+  return finalizeAnalysisChatTurn(preparedTurn, pythonResponse);
+}
+
+export async function prepareAnalysisChatTurn(
+  id: string,
+  input: ChatInput,
+): Promise<PreparedAnalysisChatTurn> {
   const message = normalizeWhitespace(input.message ?? "");
   if (!message) {
     throw new ValidationError("Please enter a follow-up question.");
@@ -724,14 +743,32 @@ export async function chatOnAnalysis(
     userMessage.content,
     context.payload,
   );
-  const pythonResponse = await requestPythonChatAnswer(pythonRequest);
+
+  return {
+    id,
+    task,
+    userMessage,
+    context,
+    pythonRequest,
+  };
+}
+
+export async function finalizeAnalysisChatTurn(
+  preparedTurn: PreparedAnalysisChatTurn,
+  pythonResponse: PythonChatResponse,
+): Promise<AnalysisPublicTask> {
+  const repository = getAnalysisRepository();
 
   const assistantMessage = createAssistantMessage(
     trimText(pythonResponse.answer, 480),
   );
-  const updatedTask = await repository.update(id, {
-    chatMessages: [...task.chatMessages, userMessage, assistantMessage],
-    result: buildUpdatedAnalysisResult(task, pythonResponse),
+  const updatedTask = await repository.update(preparedTurn.id, {
+    chatMessages: [
+      ...preparedTurn.task.chatMessages,
+      preparedTurn.userMessage,
+      assistantMessage,
+    ],
+    result: buildUpdatedAnalysisResult(preparedTurn.task, pythonResponse),
   });
 
   if (!updatedTask) {
@@ -742,8 +779,8 @@ export async function chatOnAnalysis(
     ...toPublicAnalysisTask(updatedTask),
     chatRuntime: buildChatRuntimeState(
       pythonResponse,
-      context.retrievalDebug,
-      context.citations,
+      preparedTurn.context.retrievalDebug,
+      preparedTurn.context.citations,
     ),
   };
 }
