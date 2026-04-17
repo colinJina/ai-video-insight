@@ -180,6 +180,39 @@ class MemoryTranscriptChunkRepository implements TranscriptChunkRepository {
 }
 
 class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
+  private async listChunkRowsForAnalysis(
+    analysisId: string,
+    userId: string,
+    metadataFilter: RetrievalMetadataFilter | null,
+  ) {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("analysis_transcript_chunks")
+      .select(
+        "id, analysis_id, user_id, chunk_index, text, start_seconds, end_seconds, created_at",
+      )
+      .eq("analysis_id", analysisId)
+      .eq("user_id", userId)
+      .order("chunk_index", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? [])
+      .map((row) => ({
+        id: row.id,
+        analysisId: row.analysis_id,
+        userId: row.user_id,
+        chunkIndex: row.chunk_index,
+        text: row.text,
+        startSeconds: coerceOptionalNumber(row.start_seconds),
+        endSeconds: coerceOptionalNumber(row.end_seconds),
+        createdAt: row.created_at,
+      }))
+      .filter((row) => chunkMatchesMetadataFilter(row, metadataFilter));
+  }
+
   async replaceForAnalysis({
     analysisId,
     userId,
@@ -279,7 +312,7 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
       throw error;
     }
 
-    return (data ?? []).map((row) => ({
+    const remoteMatches = (data ?? []).map((row) => ({
       id: row.id,
       analysisId: row.analysis_id,
       userId: row.user_id,
@@ -289,6 +322,37 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
       endSeconds: coerceOptionalNumber(row.end_seconds),
       score: coerceOptionalNumber(row.score) ?? 0,
     }));
+
+    if (remoteMatches.length > 0) {
+      return remoteMatches;
+    }
+
+    // PostgreSQL simple FTS is weak for Chinese queries, so fall back to local BM25 scoring.
+    const rows = await this.listChunkRowsForAnalysis(
+      analysisId,
+      userId,
+      metadataFilter ?? null,
+    );
+    const scoredRows = computeSparseScores(
+      queryText,
+      rows.map((row) => ({
+        item: row,
+        text: row.text,
+      })),
+    );
+
+    return scoredRows
+      .slice(0, limit)
+      .map(({ item, score }) => ({
+        id: item.id,
+        analysisId: item.analysisId,
+        userId: item.userId,
+        chunkIndex: item.chunkIndex,
+        text: item.text,
+        startSeconds: item.startSeconds,
+        endSeconds: item.endSeconds,
+        score,
+      }));
   }
 }
 

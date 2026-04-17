@@ -6,9 +6,11 @@ import { createClient } from "@supabase/supabase-js";
 const DEFAULT_DENSE_LIMIT = 12;
 const DEFAULT_SPARSE_LIMIT = 10;
 const DEFAULT_TOP_K = [1, 3, 5];
-const DEFAULT_RETRIEVAL_DENSE_WEIGHT = 0.45;
-const DEFAULT_RETRIEVAL_SPARSE_WEIGHT = 0.35;
-const DEFAULT_RETRIEVAL_LEXICAL_WEIGHT = 0.2;
+const DEFAULT_RETRIEVAL_DENSE_WEIGHT = 0.65;
+const DEFAULT_RETRIEVAL_SPARSE_WEIGHT = 0.1;
+const DEFAULT_RETRIEVAL_LEXICAL_WEIGHT = 0.25;
+const BM25_K1 = 1.2;
+const BM25_B = 0.75;
 
 function printUsage() {
   console.log(`Usage:
@@ -23,6 +25,8 @@ Dataset shape:
     "queries": [
       {
         "id": "q1",
+        "analysisId": "...",
+        "userId": "...",
         "query": "...",
         "expectedChunkIndexes": [2, 3],
         "metadataFilter": {
@@ -163,6 +167,70 @@ function computeLexicalScore(query, text) {
   return overlap / queryTokens.size;
 }
 
+function buildTokenFrequency(tokens) {
+  const frequencies = new Map();
+  for (const token of tokens) {
+    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+  }
+  return frequencies;
+}
+
+function computeSparseScores(query, documents) {
+  const queryTokens = [...new Set(tokenizeRetrievalText(query))];
+  if (queryTokens.length === 0 || documents.length === 0) {
+    return [];
+  }
+
+  const preparedDocuments = documents.map((document) => {
+    const tokens = tokenizeRetrievalText(document.text);
+    return {
+      ...document,
+      tokens,
+      tokenFrequency: buildTokenFrequency(tokens),
+      uniqueTokens: new Set(tokens),
+      documentLength: Math.max(tokens.length, 1),
+    };
+  });
+
+  const averageDocumentLength =
+    preparedDocuments.reduce((total, document) => total + document.documentLength, 0) /
+    preparedDocuments.length;
+
+  return preparedDocuments
+    .map((document) => {
+      let score = 0;
+
+      for (const token of queryTokens) {
+        const termFrequency = document.tokenFrequency.get(token) ?? 0;
+        if (termFrequency <= 0) {
+          continue;
+        }
+
+        const documentFrequency = preparedDocuments.reduce(
+          (count, current) => count + (current.uniqueTokens.has(token) ? 1 : 0),
+          0,
+        );
+        const inverseDocumentFrequency = Math.log(
+          1 + (preparedDocuments.length - documentFrequency + 0.5) / (documentFrequency + 0.5),
+        );
+        const numerator = termFrequency * (BM25_K1 + 1);
+        const denominator =
+          termFrequency +
+          BM25_K1 *
+            (1 - BM25_B + BM25_B * (document.documentLength / averageDocumentLength));
+
+        score += inverseDocumentFrequency * (numerator / denominator);
+      }
+
+      return {
+        item: document.item,
+        score,
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+}
+
 function normalizeScores(entries) {
   if (entries.length === 0) {
     return [];
@@ -226,19 +294,33 @@ function validateDataset(dataset) {
     throw new Error("The dataset file must contain a JSON object.");
   }
 
-  if (typeof dataset.analysisId !== "string" || !dataset.analysisId.trim()) {
-    throw new Error("The dataset must include a non-empty analysisId.");
-  }
-
-  if (typeof dataset.userId !== "string" || !dataset.userId.trim()) {
-    throw new Error("The dataset must include a non-empty userId.");
-  }
-
   if (!Array.isArray(dataset.queries) || dataset.queries.length === 0) {
     throw new Error("The dataset must include at least one query.");
   }
 
+  const hasDatasetAnalysisId =
+    typeof dataset.analysisId === "string" && dataset.analysisId.trim();
+  const hasDatasetUserId =
+    typeof dataset.userId === "string" && dataset.userId.trim();
+
   dataset.queries.forEach((query, index) => {
+    const hasQueryAnalysisId =
+      typeof query.analysisId === "string" && query.analysisId.trim();
+    const hasQueryUserId =
+      typeof query.userId === "string" && query.userId.trim();
+
+    if (!hasDatasetAnalysisId && !hasQueryAnalysisId) {
+      throw new Error(
+        `Query #${index + 1} must include analysisId because the dataset does not define a default one.`,
+      );
+    }
+
+    if (!hasDatasetUserId && !hasQueryUserId) {
+      throw new Error(
+        `Query #${index + 1} must include userId because the dataset does not define a default one.`,
+      );
+    }
+
     if (typeof query.query !== "string" || !query.query.trim()) {
       throw new Error(`Query #${index + 1} is missing a non-empty query string.`);
     }
@@ -264,6 +346,26 @@ async function readDataset(datasetPath) {
   return {
     dataset,
     absolutePath,
+  };
+}
+
+function resolveQueryScope(dataset, queryDefinition) {
+  const datasetAnalysisId =
+    typeof dataset.analysisId === "string" ? dataset.analysisId.trim() : "";
+  const datasetUserId =
+    typeof dataset.userId === "string" ? dataset.userId.trim() : "";
+  const analysisId =
+    typeof queryDefinition.analysisId === "string" && queryDefinition.analysisId.trim()
+      ? queryDefinition.analysisId.trim()
+      : datasetAnalysisId;
+  const userId =
+    typeof queryDefinition.userId === "string" && queryDefinition.userId.trim()
+      ? queryDefinition.userId.trim()
+      : datasetUserId;
+
+  return {
+    analysisId,
+    userId,
   };
 }
 
@@ -294,39 +396,50 @@ async function fetchQueryEmbedding(query) {
     return null;
   }
 
-  const response = await fetch(resolveEmbeddingsUrl(baseUrl), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      input: query,
-    }),
-  });
+  let lastError = null;
 
-  const rawBody = await response.text();
-  const body = rawBody ? JSON.parse(rawBody) : null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(resolveEmbeddingsUrl(baseUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          input: query,
+        }),
+      });
 
-  if (!response.ok) {
-    const errorMessage =
-      body &&
-      typeof body === "object" &&
-      body.error &&
-      typeof body.error === "object" &&
-      typeof body.error.message === "string"
-        ? body.error.message
-        : `Embedding request failed with status ${response.status}.`;
-    throw new Error(errorMessage);
+      const rawBody = await response.text();
+      const body = rawBody ? JSON.parse(rawBody) : null;
+
+      if (!response.ok) {
+        const errorMessage =
+          body &&
+          typeof body === "object" &&
+          body.error &&
+          typeof body.error === "object" &&
+          typeof body.error.message === "string"
+            ? body.error.message
+            : `Embedding request failed with status ${response.status}.`;
+        throw new Error(errorMessage);
+      }
+
+      const embedding = body?.data?.[0]?.embedding;
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("The embedding service did not return a usable embedding.");
+      }
+
+      return embedding;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+    }
   }
 
-  const embedding = body?.data?.[0]?.embedding;
-  if (!Array.isArray(embedding) || embedding.length === 0) {
-    throw new Error("The embedding service did not return a usable embedding.");
-  }
-
-  return embedding;
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 function buildRpcMetadataFilter(queryDefinition) {
@@ -344,7 +457,27 @@ function buildRpcMetadataFilter(queryDefinition) {
   };
 }
 
+function chunkMatchesMetadataFilter(chunk, queryDefinition) {
+  const filter = queryDefinition.metadataFilter;
+  if (!filter || typeof filter !== "object") {
+    return true;
+  }
+
+  const filterStart = coerceNumber(filter.startSeconds) ?? 0;
+  const filterEnd = coerceNumber(filter.endSeconds) ?? Number.POSITIVE_INFINITY;
+  const chunkStart = coerceNumber(chunk.startSeconds ?? chunk.start_seconds ?? null);
+  const chunkEnd = coerceNumber(chunk.endSeconds ?? chunk.end_seconds ?? null);
+  if (chunkStart === null && chunkEnd === null) {
+    return false;
+  }
+
+  const effectiveStart = chunkStart ?? chunkEnd ?? 0;
+  const effectiveEnd = Math.max(chunkEnd ?? effectiveStart, effectiveStart);
+  return effectiveEnd >= filterStart && effectiveStart <= filterEnd;
+}
+
 async function runDenseRetrieval(supabase, dataset, queryDefinition, limit) {
+  const scope = resolveQueryScope(dataset, queryDefinition);
   const queryEmbedding = await fetchQueryEmbedding(queryDefinition.query);
   if (!queryEmbedding) {
     return {
@@ -354,8 +487,8 @@ async function runDenseRetrieval(supabase, dataset, queryDefinition, limit) {
   }
 
   const { data, error } = await supabase.rpc("match_analysis_transcript_chunks", {
-    filter_analysis_id: dataset.analysisId,
-    filter_user_id: dataset.userId,
+    filter_analysis_id: scope.analysisId,
+    filter_user_id: scope.userId,
     query_embedding: queryEmbedding,
     match_count: limit,
     ...buildRpcMetadataFilter(queryDefinition),
@@ -379,9 +512,10 @@ async function runDenseRetrieval(supabase, dataset, queryDefinition, limit) {
 }
 
 async function runSparseRetrieval(supabase, dataset, queryDefinition, limit) {
+  const scope = resolveQueryScope(dataset, queryDefinition);
   const { data, error } = await supabase.rpc("search_analysis_transcript_chunks", {
-    filter_analysis_id: dataset.analysisId,
-    filter_user_id: dataset.userId,
+    filter_analysis_id: scope.analysisId,
+    filter_user_id: scope.userId,
     query_text: queryDefinition.query,
     match_count: limit,
     ...buildRpcMetadataFilter(queryDefinition),
@@ -391,13 +525,47 @@ async function runSparseRetrieval(supabase, dataset, queryDefinition, limit) {
     throw error;
   }
 
-  return (data ?? []).map((row) => ({
+  const remoteMatches = (data ?? []).map((row) => ({
     id: row.id,
     chunkIndex: row.chunk_index,
     text: row.text,
     startSeconds: coerceNumber(row.start_seconds),
     endSeconds: coerceNumber(row.end_seconds),
     score: coerceNumber(row.score) ?? 0,
+  }));
+
+  if (remoteMatches.length > 0) {
+    return remoteMatches;
+  }
+
+  const { data: chunkRows, error: chunkError } = await supabase
+    .from("analysis_transcript_chunks")
+    .select("id, chunk_index, text, start_seconds, end_seconds")
+    .eq("analysis_id", scope.analysisId)
+    .eq("user_id", scope.userId)
+    .order("chunk_index", { ascending: true });
+
+  if (chunkError) {
+    throw chunkError;
+  }
+
+  const scoredRows = computeSparseScores(
+    queryDefinition.query,
+    (chunkRows ?? [])
+      .filter((row) => chunkMatchesMetadataFilter(row, queryDefinition))
+      .map((row) => ({
+        item: row,
+        text: row.text,
+      })),
+  );
+
+  return scoredRows.slice(0, limit).map(({ item, score }) => ({
+    id: item.id,
+    chunkIndex: item.chunk_index,
+    text: item.text,
+    startSeconds: coerceNumber(item.start_seconds),
+    endSeconds: coerceNumber(item.end_seconds),
+    score,
   }));
 }
 
@@ -514,8 +682,8 @@ function buildOutputReport(datasetPath, dataset, topKValues, queryReports, summa
   return {
     datasetPath,
     generatedAt: new Date().toISOString(),
-    analysisId: dataset.analysisId,
-    userId: dataset.userId,
+    analysisId: dataset.analysisId ?? null,
+    userId: dataset.userId ?? null,
     topK: topKValues,
     warnings,
     summary,

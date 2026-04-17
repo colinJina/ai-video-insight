@@ -1,0 +1,138 @@
+{
+  "topK": [1, 3, 5],
+  "denseLimit": 12,
+  "sparseLimit": 10,
+  "queries": [
+    {
+      "id": "mislead-origin",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "这场鱼油宣传争议的起因是什么？",
+      "expectedChunkIndexes": [0],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 90,
+        "label": "opening_context"
+      },
+      "notes": "事件起因主要在开头 chunk 0。"
+    },
+    {
+      "id": "mislead-omega3-claim",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "直播间对 Omega-3 做了哪些误导性表述？",
+      "expectedChunkIndexes": [1, 2],
+      "metadataFilter": {
+        "startSeconds": 30,
+        "endSeconds": 420,
+        "label": "omega3_claims"
+      },
+      "notes": "Omega-3 来源和日常饮食相关说法集中在 chunk 1/2。"
+    },
+    {
+      "id": "mislead-food-sources",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "视频如何反驳“日常饮食吃不到 Omega-3”这种说法？",
+      "expectedChunkIndexes": [1, 2],
+      "notes": "反驳主要围绕 Omega-3 的饮食来源，集中在 chunk 1/2。"
+    },
+    {
+      "id": "mislead-omega6",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "视频为什么说把 Omega-6 说成完全不需要是不科学的？",
+      "expectedChunkIndexes": [3],
+      "metadataFilter": {
+        "startSeconds": 87,
+        "endSeconds": 420,
+        "label": "omega6_rebuttal"
+      },
+      "notes": "对 Omega-6 的集中反驳在 chunk 3。"
+    },
+    {
+      "id": "mislead-effect-claims",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "主播宣传鱼油时夸大了哪些功效？",
+      "expectedChunkIndexes": [3],
+      "notes": "代谢、记忆力、睡眠等夸大功效都在 chunk 3。"
+    },
+    {
+      "id": "mislead-regulation",
+      "analysisId": "51a16179-b355-45c7-b437-c82221d7b270",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "视频最后对这种宣传方式的监管和合规问题有什么态度？",
+      "expectedChunkIndexes": [3],
+      "notes": "法规与合规态度集中在 chunk 3。"
+    },
+    {
+      "id": "fishoil-opening-claim",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "杨医生开头对保健品鱼油下了什么结论？",
+      "expectedChunkIndexes": [0],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 60,
+        "label": "opening_claim"
+      },
+      "notes": "开场结论直接落在 chunk 0。"
+    },
+    {
+      "id": "fishoil-prescription-vs-supplement",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "杨医生为什么说保健品鱼油不能替代处方级鱼油？",
+      "expectedChunkIndexes": [0, 1],
+      "notes": "降血脂有限、处方级纯度更高的论证主要在 chunk 0/1。"
+    },
+    {
+      "id": "fishoil-food-vs-supplement",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "视频里为什么反复强调食补优于保健品？",
+      "expectedChunkIndexes": [1, 4, 5],
+      "notes": "杨医生在前后两段都强调食补优于补剂。"
+    },
+    {
+      "id": "fishoil-azu-position",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "阿祖的核心观点是什么？",
+      "expectedChunkIndexes": [2, 3],
+      "metadataFilter": {
+        "startSeconds": 59,
+        "endSeconds": 482,
+        "label": "azu_position"
+      },
+      "notes": "阿祖前半段回应集中在 chunk 2/3。"
+    },
+    {
+      "id": "fishoil-azu-final-response",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "阿祖最后为什么认为食品级鱼油仍然可以作为一种选择？",
+      "expectedChunkIndexes": [6, 7],
+      "metadataFilter": {
+        "startSeconds": 487,
+        "endSeconds": 685,
+        "label": "azu_final_response"
+      },
+      "notes": "阿祖最后的完整回应集中在 chunk 6/7。"
+    },
+    {
+      "id": "fishoil-rational-discussion",
+      "analysisId": "47f10f32-0f3f-47f2-bd08-fb676aa558d3",
+      "userId": "870b34b8-15be-40ec-9921-8193081c0c99",
+      "query": "杨医生最后呼吁大家如何讨论这场争议？",
+      "expectedChunkIndexes": [8],
+      "metadataFilter": {
+        "startSeconds": 617,
+        "endSeconds": 686,
+        "label": "rational_discussion"
+      },
+      "notes": "反对网暴、对事不对人的收尾观点在 chunk 8。"
+    }
+  ]
+}
