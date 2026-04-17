@@ -132,6 +132,8 @@ export interface Database {
           filter_user_id: string;
           query_embedding: number[];
           match_count?: number;
+          filter_start_seconds?: number | null;
+          filter_end_seconds?: number | null;
         };
         Returns: Array<{
           id: string;
@@ -150,6 +152,8 @@ export interface Database {
           filter_user_id: string;
           query_text: string;
           match_count?: number;
+          filter_start_seconds?: number | null;
+          filter_end_seconds?: number | null;
         };
         Returns: Array<{
           id: string;

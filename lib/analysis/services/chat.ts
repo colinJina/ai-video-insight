@@ -16,6 +16,7 @@ import {
 } from "@/lib/analysis/env";
 import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
 import {
+  extractMetadataFilterFromQuery,
   computeLexicalScore,
   normalizeScores,
   tokenizeRetrievalText,
@@ -98,6 +99,20 @@ type AnalysisChatContextBuildResult = {
   retrievalDebug: AnalysisChatRetrievalDebug;
   citations: AnalysisChatCitation[];
 };
+
+function resolveTranscriptDurationSeconds(task: AnalysisTask) {
+  const transcriptEnd =
+    task.transcript?.segments.reduce<number | null>((latest, segment) => {
+      const segmentEnd = segment.endSeconds ?? segment.startSeconds;
+      if (typeof segmentEnd !== "number" || !Number.isFinite(segmentEnd)) {
+        return latest;
+      }
+
+      return latest === null ? segmentEnd : Math.max(latest, segmentEnd);
+    }, null) ?? null;
+
+  return transcriptEnd ?? task.video.durationSeconds ?? null;
+}
 
 function toPythonChatMessages(
   messages: AnalysisChatMessage[],
@@ -490,6 +505,10 @@ async function retrieveTranscriptMatches(
   latestMessage: string,
 ): Promise<RetrievalSelection> {
   const rewrittenQuery = buildRetrievalQuery(task, recentMessages, latestMessage);
+  const metadataFilter = extractMetadataFilterFromQuery(
+    rewrittenQuery,
+    resolveTranscriptDurationSeconds(task),
+  );
   const embeddingProvider = createEmbeddingProvider();
   const vectorSearchEnabled = embeddingProvider.isConfigured();
   const lexicalSearchEnabled = tokenizeRetrievalText(rewrittenQuery).length > 0;
@@ -503,6 +522,7 @@ async function retrieveTranscriptMatches(
     vectorSearchEnabled,
     lexicalSearchEnabled,
     fusionStrategy: "dense_sparse_weighted",
+    metadataFilter,
   };
   if (!vectorSearchEnabled && !lexicalSearchEnabled) {
     return {
@@ -524,6 +544,7 @@ async function retrieveTranscriptMatches(
           userId: task.userId,
           queryEmbedding,
           limit: RETRIEVAL_CANDIDATE_LIMIT,
+          metadataFilter,
         });
       } catch (error) {
         console.warn(
@@ -540,6 +561,7 @@ async function retrieveTranscriptMatches(
           userId: task.userId,
           queryText: rewrittenQuery,
           limit: RETRIEVAL_SPARSE_CANDIDATE_LIMIT,
+          metadataFilter,
         });
       } catch (error) {
         console.warn(
@@ -569,6 +591,7 @@ async function retrieveTranscriptMatches(
         vectorSearchEnabled,
         lexicalSearchEnabled,
         fusionStrategy: "dense_sparse_weighted",
+        metadataFilter,
       },
     };
   } catch (error) {

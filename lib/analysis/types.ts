@@ -69,6 +69,12 @@ export interface TranscriptChunkMatch extends TranscriptChunk {
   score: number;
 }
 
+export interface RetrievalMetadataFilter {
+  startSeconds: number | null;
+  endSeconds: number | null;
+  label: string;
+}
+
 export interface OutlineItem {
   time: string | null;
   text: string;
@@ -145,6 +151,7 @@ export interface AnalysisChatRetrievalDebug {
   vectorSearchEnabled: boolean;
   lexicalSearchEnabled: boolean;
   fusionStrategy: string;
+  metadataFilter: RetrievalMetadataFilter | null;
 }
 
 export interface AnalysisChatRuntimeState {

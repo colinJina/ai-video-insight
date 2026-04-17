@@ -1,11 +1,18 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { computeSparseScores } from "@/lib/analysis/retrieval";
+import {
+  chunkMatchesMetadataFilter,
+  computeSparseScores,
+} from "@/lib/analysis/retrieval";
 import { isSupabaseRepositoryConfigured } from "@/lib/supabase/env";
 import { shouldFallbackToMemoryRepository } from "@/lib/supabase/repository-fallback";
 import { isSupabaseBackedUserId } from "@/lib/supabase/user-id";
-import type { TranscriptChunk, TranscriptChunkMatch } from "@/lib/analysis/types";
+import type {
+  RetrievalMetadataFilter,
+  TranscriptChunk,
+  TranscriptChunkMatch,
+} from "@/lib/analysis/types";
 
 type TranscriptChunkRecord = TranscriptChunk & {
   id: string;
@@ -26,6 +33,7 @@ type MatchTranscriptChunksInput = {
   userId: string;
   queryEmbedding: number[];
   limit: number;
+  metadataFilter?: RetrievalMetadataFilter | null;
 };
 
 type SearchTranscriptChunksInput = {
@@ -33,6 +41,7 @@ type SearchTranscriptChunksInput = {
   userId: string;
   queryText: string;
   limit: number;
+  metadataFilter?: RetrievalMetadataFilter | null;
 };
 
 export interface TranscriptChunkRepository {
@@ -129,11 +138,13 @@ class MemoryTranscriptChunkRepository implements TranscriptChunkRepository {
     userId,
     queryEmbedding,
     limit,
+    metadataFilter,
   }: MatchTranscriptChunksInput) {
     const records = transcriptChunkStore.get(analysisId) ?? [];
 
     return records
       .filter((record) => record.userId === userId)
+      .filter((record) => chunkMatchesMetadataFilter(record, metadataFilter ?? null))
       .map((record) =>
         mapChunkRecordToMatch(record, cosineSimilarity(record.embedding, queryEmbedding)),
       )
@@ -147,12 +158,14 @@ class MemoryTranscriptChunkRepository implements TranscriptChunkRepository {
     userId,
     queryText,
     limit,
+    metadataFilter,
   }: SearchTranscriptChunksInput) {
     const records = transcriptChunkStore.get(analysisId) ?? [];
     const scoredRecords = computeSparseScores(
       queryText,
       records
         .filter((record) => record.userId === userId)
+        .filter((record) => chunkMatchesMetadataFilter(record, metadataFilter ?? null))
         .map((record) => ({
           item: record,
           text: record.text,
@@ -211,6 +224,7 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
     userId,
     queryEmbedding,
     limit,
+    metadataFilter,
   }: MatchTranscriptChunksInput) {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase.rpc(
@@ -220,6 +234,8 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
         filter_user_id: userId,
         query_embedding: queryEmbedding,
         match_count: limit,
+        filter_start_seconds: metadataFilter?.startSeconds ?? null,
+        filter_end_seconds: metadataFilter?.endSeconds ?? null,
       },
     );
 
@@ -244,6 +260,7 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
     userId,
     queryText,
     limit,
+    metadataFilter,
   }: SearchTranscriptChunksInput) {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase.rpc(
@@ -253,6 +270,8 @@ class SupabaseTranscriptChunkRepository implements TranscriptChunkRepository {
         filter_user_id: userId,
         query_text: queryText,
         match_count: limit,
+        filter_start_seconds: metadataFilter?.startSeconds ?? null,
+        filter_end_seconds: metadataFilter?.endSeconds ?? null,
       },
     );
 

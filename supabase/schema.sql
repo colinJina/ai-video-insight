@@ -171,7 +171,9 @@ create or replace function public.match_analysis_transcript_chunks(
   filter_analysis_id uuid,
   filter_user_id uuid,
   query_embedding vector(1536),
-  match_count integer default 4
+  match_count integer default 4,
+  filter_start_seconds numeric default null,
+  filter_end_seconds numeric default null
 )
 returns table (
   id uuid,
@@ -198,6 +200,14 @@ as $$
   from public.analysis_transcript_chunks as chunk
   where chunk.analysis_id = filter_analysis_id
     and chunk.user_id = filter_user_id
+    and (
+      filter_start_seconds is null
+      or coalesce(chunk.end_seconds, chunk.start_seconds, 0) >= filter_start_seconds
+    )
+    and (
+      filter_end_seconds is null
+      or coalesce(chunk.start_seconds, chunk.end_seconds, 0) <= filter_end_seconds
+    )
   order by chunk.embedding <=> query_embedding
   limit greatest(match_count, 1);
 $$;
@@ -206,7 +216,9 @@ create or replace function public.search_analysis_transcript_chunks(
   filter_analysis_id uuid,
   filter_user_id uuid,
   query_text text,
-  match_count integer default 6
+  match_count integer default 6,
+  filter_start_seconds numeric default null,
+  filter_end_seconds numeric default null
 )
 returns table (
   id uuid,
@@ -245,6 +257,14 @@ as $$
   cross join search_query
   where chunk.analysis_id = filter_analysis_id
     and chunk.user_id = filter_user_id
+    and (
+      filter_start_seconds is null
+      or coalesce(chunk.end_seconds, chunk.start_seconds, 0) >= filter_start_seconds
+    )
+    and (
+      filter_end_seconds is null
+      or coalesce(chunk.start_seconds, chunk.end_seconds, 0) <= filter_end_seconds
+    )
     and search_query.terms is not null
     and search_query.terms @@ to_tsvector('simple', chunk.text)
   order by score desc, chunk.chunk_index asc
