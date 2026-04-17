@@ -5,6 +5,7 @@ from urllib import error, request
 from app.core.config import get_settings
 from app.core.exceptions import ServiceUnavailableError
 from app.models.chat import ChatContext, ChatMemoryItem, ChatMessage
+from app.services.chat_langgraph_adapter import LangGraphChatModelAdapter
 from app.services.chat_langchain_adapter import LangChainChatModelAdapter
 
 
@@ -161,7 +162,7 @@ class ChatModelGateway:
         explicit_adapter = (settings.chat_model_adapter or "").strip().lower()
         self.adapter_name = (
             explicit_adapter
-            if explicit_adapter in {"http", "langchain"}
+            if explicit_adapter in {"http", "langchain", "langgraph"}
             else "langchain"
             if settings.langchain_enabled
             else "http"
@@ -175,8 +176,21 @@ class ChatModelGateway:
             model=self.model,
             timeout_seconds=self.timeout_seconds,
         )
+        self.langgraph_adapter = LangGraphChatModelAdapter(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model=self.model,
+            timeout_seconds=self.timeout_seconds,
+        )
 
     def generate(self, context: ChatContext) -> str | None:
+        if self._uses_langgraph_adapter():
+            return self.langgraph_adapter.generate(
+                self._build_system_prompt(),
+                self._build_user_prompt(context),
+                context,
+            )
+
         if self._uses_langchain_adapter():
             return self.langchain_adapter.generate(
                 self._build_system_prompt(),
@@ -208,6 +222,14 @@ class ChatModelGateway:
     def generate_stream(self, context: ChatContext) -> Iterable[str] | None:
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(context)
+
+        if self._uses_langgraph_adapter():
+            chunks = self.langgraph_adapter.generate_stream(
+                system_prompt,
+                user_prompt,
+                context,
+            )
+            return chunks if chunks else None
 
         if self._uses_langchain_adapter():
             chunks = self.langchain_adapter.generate_stream(
@@ -340,6 +362,9 @@ class ChatModelGateway:
 
     def _uses_langchain_adapter(self) -> bool:
         return self.adapter_name == "langchain"
+
+    def _uses_langgraph_adapter(self) -> bool:
+        return self.adapter_name == "langgraph"
 
     def _request_completion(
         self,

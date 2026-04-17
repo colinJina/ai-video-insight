@@ -123,8 +123,9 @@ Notes:
 
 - `LOG_LEVEL` controls application logging verbosity.
 - `CHAT_PROVIDER` is a simple label exposed by the root endpoint so you can show which chat backend is active.
-- `CHAT_MODEL_ADAPTER` accepts `http` or `langchain`. If omitted, the backend falls back to `LANGCHAIN_ENABLED=true` and otherwise uses `http`.
+- `CHAT_MODEL_ADAPTER` accepts `http`, `langchain`, or `langgraph`. If omitted, the backend falls back to `LANGCHAIN_ENABLED=true` and otherwise uses `http`.
 - The LangChain adapter reuses the same `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, and `AI_TIMEOUT_MS` settings as the direct HTTP adapter.
+- The LangGraph adapter uses the same model settings, but wraps answer generation in a real tool-calling loop over the current analysis context.
 
 ## API Overview
 
@@ -267,12 +268,12 @@ This is intentionally minimal, but it is enough to demonstrate that the service 
 
 ## LangChain Adapter Layer
 
-The files [app/services/chat_model.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_model.py) and [app/services/chat_langchain_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langchain_adapter.py) now provide a switchable model adapter layer.
+The files [app/services/chat_model.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_model.py), [app/services/chat_langchain_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langchain_adapter.py), and [app/services/chat_langgraph_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langgraph_adapter.py) now provide a switchable model adapter layer.
 
 Current behavior:
 
 1. `ChatService` still calls `ChatModelGateway` for answer generation, summary compression, and memory extraction.
-2. `ChatModelGateway` selects either the direct `http` path or the `langchain` adapter from configuration.
+2. `ChatModelGateway` selects either the direct `http` path, the `langchain` adapter, or the `langgraph` adapter from configuration.
 3. Request validation, memory loading, context assembly, and response shaping stay unchanged.
 
 This keeps the integration story simple:
@@ -282,3 +283,4 @@ This keeps the integration story simple:
 - context building stays deterministic
 - model invocation stays isolated behind one gateway
 - LangChain can be introduced without rewriting the chat pipeline
+- LangGraph can be enabled as a tool-calling answer loop without replacing the retrieval or memory pipeline

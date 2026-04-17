@@ -56,6 +56,17 @@ def test_gateway_uses_langchain_when_enabled(monkeypatch):
     assert gateway.adapter_name == "langchain"
 
 
+def test_gateway_uses_langgraph_when_selected(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.chat_model.get_settings",
+        lambda: make_settings(chat_model_adapter="langgraph"),
+    )
+
+    gateway = ChatModelGateway()
+
+    assert gateway.adapter_name == "langgraph"
+
+
 def test_gateway_generate_delegates_to_langchain_adapter(monkeypatch):
     monkeypatch.setattr(
         "app.services.chat_model.get_settings",
@@ -78,6 +89,31 @@ def test_gateway_generate_delegates_to_langchain_adapter(monkeypatch):
     assert "video analysis product" in captured["system_prompt"]
     assert "Latest user question" in captured["user_prompt"]
     assert context.latest_user_message in captured["user_prompt"]
+
+
+def test_gateway_generate_delegates_to_langgraph_adapter(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.chat_model.get_settings",
+        lambda: make_settings(chat_model_adapter="langgraph"),
+    )
+    gateway = ChatModelGateway()
+    context = make_context()
+    captured = {}
+
+    def fake_generate(system_prompt: str, user_prompt: str, received_context: ChatContext):
+        captured["system_prompt"] = system_prompt
+        captured["user_prompt"] = user_prompt
+        captured["context"] = received_context
+        return "langgraph-answer"
+
+    monkeypatch.setattr(gateway.langgraph_adapter, "generate", fake_generate)
+
+    answer = gateway.generate(context)
+
+    assert answer == "langgraph-answer"
+    assert captured["context"] is context
+    assert "video analysis product" in captured["system_prompt"]
+    assert "Latest user question" in captured["user_prompt"]
 
 
 def test_gateway_generate_uses_http_path_when_selected(monkeypatch):
