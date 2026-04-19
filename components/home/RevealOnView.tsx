@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ElementType, HTMLAttributes, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type RevealOnViewProps = {
   as?: ElementType;
@@ -12,6 +12,8 @@ type RevealOnViewProps = {
   threshold?: number;
   rootMargin?: string;
 } & HTMLAttributes<HTMLElement>;
+
+const subscribeToIntersectionObserverSupport = () => () => {};
 
 export default function RevealOnView({
   as: Component = "div",
@@ -24,18 +26,17 @@ export default function RevealOnView({
   ...rest
 }: RevealOnViewProps) {
   const ref = useRef<HTMLElement | null>(null);
-  const [isVisible, setIsVisible] = useState(
+  const [isVisible, setIsVisible] = useState(false);
+  const revealWithoutObserver = useSyncExternalStore(
+    subscribeToIntersectionObserverSupport,
     () => typeof IntersectionObserver === "undefined",
+    () => false,
   );
 
   useEffect(() => {
     const element = ref.current;
 
-    if (!element) {
-      return;
-    }
-
-    if (typeof IntersectionObserver === "undefined") {
+    if (!element || revealWithoutObserver) {
       return;
     }
 
@@ -59,16 +60,17 @@ export default function RevealOnView({
     return () => {
       observer.disconnect();
     };
-  }, [once, rootMargin, threshold]);
+  }, [once, revealWithoutObserver, rootMargin, threshold]);
 
   const style = { transitionDelay: `${delay}s` } satisfies CSSProperties;
+  const shouldShow = isVisible || revealWithoutObserver;
 
   return (
     <Component
       ref={ref as never}
       style={style}
       {...rest}
-      className={`reveal-on-view ${isVisible ? "is-visible" : ""} ${className}`.trim()}
+      className={`reveal-on-view ${shouldShow ? "is-visible" : ""} ${className}`.trim()}
     >
       {children}
     </Component>
