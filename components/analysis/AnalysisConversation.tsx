@@ -119,6 +119,14 @@ export default function AnalysisConversation({
     .length
     ? analysis.result.chatContext.suggestedQuestions
     : (analysis.result?.suggestedQuestions ?? []);
+  const conversationSummary =
+    analysis.chatRuntime?.conversationSummary ??
+    analysis.result?.chatState.conversationSummary ??
+    null;
+  const persistedMemoryCount =
+    analysis.chatRuntime?.memoryItems.length ??
+    analysis.result?.chatState.memoryItems.length ??
+    0;
   const latestMessageIndex = analysis.chatMessages.length - 1;
   const latestAssistantCitations =
     analysis.chatMessages[latestMessageIndex]?.role === "assistant"
@@ -223,6 +231,20 @@ export default function AnalysisConversation({
 
   return (
     <div className="mt-5 space-y-5">
+      {conversationSummary ? (
+        <div className="rounded-2xl border border-[color:rgba(255,127,0,0.18)] bg-[color:rgba(255,127,0,0.06)] p-4">
+          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--primary-strong)]">
+            Conversation Summary
+          </p>
+          <p className="mt-3 text-sm leading-7 text-[color:var(--text-muted)]">
+            {conversationSummary}
+          </p>
+          <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.56)]">
+            Persisted memory items {persistedMemoryCount}
+          </p>
+        </div>
+      ) : null}
+
       {analysis.chatMessages.length > 0 ? (
         analysis.chatMessages.map((message, index) => {
           const isLatestAssistantReply =

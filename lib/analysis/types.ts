@@ -14,6 +14,25 @@ export type AnalysisTaskStatus =
   | "completed"
   | "failed";
 
+export type AnalysisJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type AnalysisJobStage =
+  | "queued"
+  | "transcript"
+  | "summary"
+  | "indexing"
+  | "completed"
+  | "failed";
+
+export type AnalysisCheckpointStatus =
+  | "started"
+  | "completed"
+  | "failed";
+
 export type AnalysisViewStatus =
   | "idle"
   | "submitting"
@@ -131,6 +150,37 @@ export interface AnalysisStoredMemoryItem extends AnalysisChatMemorySnapshot {
 export interface AnalysisChatState {
   conversationSummary: string | null;
   memoryItems: AnalysisStoredMemoryItem[];
+}
+
+export interface AnalysisJob {
+  analysisId: string;
+  userId: string;
+  status: AnalysisJobStatus;
+  stage: AnalysisJobStage;
+  attemptCount: number;
+  maxAttempts: number;
+  nextRunAt: string;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  lastHeartbeatAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface AnalysisCheckpoint {
+  id: string;
+  analysisId: string;
+  userId: string;
+  stage: AnalysisJobStage;
+  attempt: number;
+  status: AnalysisCheckpointStatus;
+  payload: Record<string, unknown> | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AnalysisChatCitation {

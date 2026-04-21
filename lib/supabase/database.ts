@@ -1,5 +1,8 @@
 import type { AppThemePreference, NotificationType } from "@/lib/app/types";
 import type {
+  AnalysisCheckpointStatus,
+  AnalysisJobStage,
+  AnalysisJobStatus,
   AnalysisChatMessage,
   AnalysisResult,
   AnalysisTaskStatus,
@@ -77,6 +80,100 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<TranscriptChunkRow>;
+        Relationships: [];
+      };
+      analysis_jobs: {
+        Row: {
+          analysis_id: string;
+          user_id: string;
+          status: AnalysisJobStatus;
+          stage: AnalysisJobStage;
+          attempt_count: number;
+          max_attempts: number;
+          next_run_at: string;
+          lease_owner: string | null;
+          lease_expires_at: string | null;
+          last_heartbeat_at: string | null;
+          last_error: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          analysis_id: string;
+          user_id: string;
+          status?: AnalysisJobStatus;
+          stage?: AnalysisJobStage;
+          attempt_count?: number;
+          max_attempts?: number;
+          next_run_at?: string;
+          lease_owner?: string | null;
+          lease_expires_at?: string | null;
+          last_heartbeat_at?: string | null;
+          last_error?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["analysis_jobs"]["Row"]>;
+        Relationships: [];
+      };
+      agent_checkpoints: {
+        Row: {
+          id: string;
+          analysis_id: string;
+          user_id: string;
+          stage: AnalysisJobStage;
+          attempt: number;
+          status: AnalysisCheckpointStatus;
+          payload: Json | null;
+          error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          analysis_id: string;
+          user_id: string;
+          stage: AnalysisJobStage;
+          attempt: number;
+          status: AnalysisCheckpointStatus;
+          payload?: Json | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["agent_checkpoints"]["Row"]>;
+        Relationships: [];
+      };
+      memory_store: {
+        Row: {
+          id: string;
+          analysis_id: string;
+          user_id: string;
+          memory_key: string;
+          kind: string;
+          content: string;
+          source: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          analysis_id: string;
+          user_id: string;
+          memory_key: string;
+          kind: string;
+          content: string;
+          source?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["memory_store"]["Row"]>;
         Relationships: [];
       };
       user_notifications: {
@@ -165,6 +262,47 @@ export interface Database {
           end_seconds: number | null;
           score: number;
         }>;
+      };
+      claim_analysis_job: {
+        Args: {
+          claim_analysis_id: string;
+          claim_worker_id: string;
+          claim_lease_seconds?: number;
+        };
+        Returns: Database["public"]["Tables"]["analysis_jobs"]["Row"][];
+      };
+      heartbeat_analysis_job: {
+        Args: {
+          claim_analysis_id: string;
+          claim_worker_id: string;
+          claim_lease_seconds?: number;
+        };
+        Returns: Database["public"]["Tables"]["analysis_jobs"]["Row"][];
+      };
+      advance_analysis_job_stage: {
+        Args: {
+          claim_analysis_id: string;
+          claim_worker_id: string;
+          next_stage: string;
+        };
+        Returns: Database["public"]["Tables"]["analysis_jobs"]["Row"][];
+      };
+      complete_analysis_job: {
+        Args: {
+          claim_analysis_id: string;
+          claim_worker_id: string;
+        };
+        Returns: Database["public"]["Tables"]["analysis_jobs"]["Row"][];
+      };
+      fail_analysis_job: {
+        Args: {
+          claim_analysis_id: string;
+          claim_worker_id: string;
+          failure_stage: string;
+          failure_error: string;
+          retry_delay_seconds?: number;
+        };
+        Returns: Database["public"]["Tables"]["analysis_jobs"]["Row"][];
       };
     };
     Enums: Record<string, never>;

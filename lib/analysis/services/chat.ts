@@ -14,6 +14,7 @@ import {
   getRetrievalSparseWeight,
   isRetrievalQueryRewriteEnabled,
 } from "@/lib/analysis/env";
+import { getAnalysisMemoryStoreRepository } from "@/lib/analysis/memory-store-repository";
 import { createEmbeddingProvider } from "@/lib/analysis/providers/embedding";
 import {
   extractMetadataFilterFromQuery,
@@ -33,6 +34,7 @@ import { chunkTranscriptSegments } from "@/lib/analysis/transcript-chunking";
 import { getTranscriptChunkRepository } from "@/lib/analysis/transcript-chunk-repository";
 import type {
   AnalysisChatCitation,
+  AnalysisChatState,
   AnalysisChatMessage,
   AnalysisChatContextPayload,
   AnalysisChatRetrievalDebug,
@@ -104,6 +106,7 @@ type AnalysisChatContextBuildResult = {
 export type PreparedAnalysisChatTurn = {
   id: string;
   task: AnalysisTask;
+  chatState: AnalysisChatState;
   userMessage: AnalysisChatMessage;
   context: AnalysisChatContextBuildResult;
   pythonRequest: PythonChatRequest;
@@ -200,11 +203,36 @@ function buildRequestDrivenMemoryItems(
   return memoryItems;
 }
 
-function getChatState(task: AnalysisTask) {
-  return task.result?.chatState ?? {
+function createEmptyChatState(): AnalysisChatState {
+  return {
     conversationSummary: null,
     memoryItems: [],
   };
+}
+
+function hasStoredChatState(state: AnalysisChatState) {
+  return Boolean(state.conversationSummary) || state.memoryItems.length > 0;
+}
+
+async function resolveChatState(task: AnalysisTask): Promise<AnalysisChatState> {
+  const repository = getAnalysisMemoryStoreRepository();
+  const persistedState = await repository.getState(task.id, task.userId);
+  if (hasStoredChatState(persistedState)) {
+    return persistedState;
+  }
+
+  const legacyState = task.result?.chatState ?? createEmptyChatState();
+  if (!hasStoredChatState(legacyState)) {
+    return persistedState;
+  }
+
+  await repository.replaceState({
+    analysisId: task.id,
+    userId: task.userId,
+    state: legacyState,
+  });
+
+  return legacyState;
 }
 
 function normalizeMemoryText(value: string) {
@@ -227,10 +255,10 @@ function scoreStoredMemoryItem(query: string, item: AnalysisStoredMemoryItem) {
 }
 
 function recallStoredMemoryItems(
-  task: AnalysisTask,
+  chatState: AnalysisChatState,
   query: string,
 ): PythonChatMemoryItem[] {
-  const storedItems = getChatState(task).memoryItems;
+  const storedItems = chatState.memoryItems;
   if (storedItems.length === 0) {
     return [];
   }
@@ -258,7 +286,7 @@ function recallStoredMemoryItems(
     source: item.source,
     metadata: {
       ...item.metadata,
-      recalledFrom: "analysis.result.chatState.memoryItems",
+      recalledFrom: "memory_store",
       recallScore: Number(score.toFixed(6)),
     },
   }));
@@ -619,6 +647,7 @@ async function retrieveTranscriptMatches(
 async function buildAnalysisChatContext(
   id: string,
   task: AnalysisTask,
+  chatState: AnalysisChatState,
   recentMessages: AnalysisChatMessage[],
   latestMessage: string,
 ): Promise<AnalysisChatContextBuildResult> {
@@ -633,7 +662,10 @@ async function buildAnalysisChatContext(
     recentMessages,
     latestMessage,
   );
-  const storedMemoryItems = recallStoredMemoryItems(task, retrieval.debug.rewrittenQuery);
+  const storedMemoryItems = recallStoredMemoryItems(
+    chatState,
+    retrieval.debug.rewrittenQuery,
+  );
   const retrievedMemoryItems = buildRetrievedChunkMemoryItems(retrieval.matches);
   const transcriptExcerpt = retrieval.matches.length > 0
     ? buildRetrievedTranscriptExcerpt(retrieval.matches)
@@ -647,7 +679,7 @@ async function buildAnalysisChatContext(
       analysisId: id,
       analysisSummary: task.result.summary,
       transcriptExcerpt,
-      storedConversationSummary: getChatState(task).conversationSummary,
+      storedConversationSummary: chatState.conversationSummary,
       outline: task.result.outline,
       keyPoints: task.result.keyPoints,
       recentMessages,
@@ -663,18 +695,19 @@ async function buildAnalysisChatContext(
 }
 
 function buildChatRuntimeState(
+  chatState: AnalysisChatState,
   pythonResponse: Awaited<ReturnType<typeof requestPythonChatAnswer>>,
   retrievalDebug: AnalysisChatRetrievalDebug,
   citations: AnalysisChatCitation[],
 ): AnalysisChatRuntimeState {
   return {
     memoryHits: pythonResponse.memoryHits,
-    conversationSummary: pythonResponse.conversationSummary,
-    memoryItems: pythonResponse.memoryItems.map((item) => ({
+    conversationSummary: chatState.conversationSummary,
+    memoryItems: chatState.memoryItems.map((item) => ({
       kind: item.kind,
       content: item.content,
-      source: item.source,
-      metadata: item.metadata,
+      source: item.source ?? null,
+      metadata: item.metadata ?? {},
     })),
     citations,
     retrievalDebug,
@@ -683,6 +716,7 @@ function buildChatRuntimeState(
 
 function buildUpdatedAnalysisResult(
   task: AnalysisTask,
+  chatState: AnalysisChatState,
   pythonResponse: Awaited<ReturnType<typeof requestPythonChatAnswer>>,
 ) {
   if (!task.result) {
@@ -693,9 +727,9 @@ function buildUpdatedAnalysisResult(
     ...task.result,
     chatState: {
       conversationSummary:
-        pythonResponse.conversationSummary ?? getChatState(task).conversationSummary,
+        pythonResponse.conversationSummary ?? chatState.conversationSummary,
       memoryItems: mergeStoredMemoryItems(
-        getChatState(task).memoryItems,
+        chatState.memoryItems,
         pythonResponse.memoryUpdates,
       ),
     },
@@ -732,10 +766,12 @@ export async function prepareAnalysisChatTurn(
     throw new ConflictError("Wait for the video analysis to complete before sending chat messages.");
   }
 
+  const chatState = await resolveChatState(task);
   const userMessage = createUserMessage(trimText(message, 500));
   const context = await buildAnalysisChatContext(
     id,
     task,
+    chatState,
     [...task.chatMessages, userMessage],
     userMessage.content,
   );
@@ -747,6 +783,7 @@ export async function prepareAnalysisChatTurn(
   return {
     id,
     task,
+    chatState,
     userMessage,
     context,
     pythonRequest,
@@ -758,6 +795,17 @@ export async function finalizeAnalysisChatTurn(
   pythonResponse: PythonChatResponse,
 ): Promise<AnalysisPublicTask> {
   const repository = getAnalysisRepository();
+  const nextResult = buildUpdatedAnalysisResult(
+    preparedTurn.task,
+    preparedTurn.chatState,
+    pythonResponse,
+  );
+  const nextChatState = nextResult?.chatState ?? createEmptyChatState();
+  await getAnalysisMemoryStoreRepository().replaceState({
+    analysisId: preparedTurn.id,
+    userId: preparedTurn.task.userId,
+    state: nextChatState,
+  });
 
   const assistantMessage = createAssistantMessage(
     trimText(pythonResponse.answer, 480),
@@ -768,7 +816,7 @@ export async function finalizeAnalysisChatTurn(
       preparedTurn.userMessage,
       assistantMessage,
     ],
-    result: buildUpdatedAnalysisResult(preparedTurn.task, pythonResponse),
+    result: nextResult,
   });
 
   if (!updatedTask) {
@@ -778,6 +826,7 @@ export async function finalizeAnalysisChatTurn(
   return {
     ...toPublicAnalysisTask(updatedTask),
     chatRuntime: buildChatRuntimeState(
+      nextChatState,
       pythonResponse,
       preparedTurn.context.retrievalDebug,
       preparedTurn.context.citations,

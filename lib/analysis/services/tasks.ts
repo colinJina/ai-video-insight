@@ -3,6 +3,7 @@ import { extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { NotFoundError, ValidationError } from "@/lib/analysis/errors";
+import { getAnalysisJobRepository } from "@/lib/analysis/job-repository";
 import {
   getAnalysisRepository,
   toPublicAnalysisTask,
@@ -19,6 +20,9 @@ import type {
 import { assertValidVideoUrl } from "@/lib/analysis/utils";
 
 const runningTasks = new Map<string, Promise<void>>();
+const ANALYSIS_WORKER_ID = `analysis-worker:${process.pid ?? "unknown"}:${randomUUID()}`;
+const ANALYSIS_HEARTBEAT_INTERVAL_MS = 15_000;
+const RUNNABLE_JOB_BATCH_SIZE = 4;
 
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([".mp4"]);
 const ALLOWED_UPLOAD_MIME_TYPES = new Set(["video/mp4", "application/mp4"]);
@@ -68,12 +72,56 @@ function ensureAnalysisTaskRunning(id: string) {
     return existing;
   }
 
-  const promise = processAnalysisTask(id).finally(() => {
+  const promise = runAnalysisTask(id).finally(() => {
     runningTasks.delete(id);
   });
 
   runningTasks.set(id, promise);
   return promise;
+}
+
+async function runAnalysisTask(id: string) {
+  const jobRepository = getAnalysisJobRepository();
+  const claimedJob = await jobRepository.claim(id, ANALYSIS_WORKER_ID);
+
+  if (!claimedJob) {
+    await processAnalysisTask({ analysisId: id });
+    return;
+  }
+
+  const heartbeat = setInterval(() => {
+    void jobRepository.heartbeat(id, ANALYSIS_WORKER_ID).catch((error) => {
+      console.warn(`[analysis] Failed to heartbeat job ${id}.`, error);
+    });
+  }, ANALYSIS_HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref?.();
+
+  try {
+    await processAnalysisTask({
+      analysisId: id,
+      job: claimedJob,
+      workerId: ANALYSIS_WORKER_ID,
+    });
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+async function ensureRunnableAnalysisJobs(limit = RUNNABLE_JOB_BATCH_SIZE) {
+  const jobRepository = getAnalysisJobRepository();
+  const runnableJobs = await jobRepository.listRunnable(limit);
+
+  await Promise.all(
+    runnableJobs.map(async (job) => {
+      await ensureAnalysisTaskRunning(job.analysisId);
+    }),
+  );
+}
+
+function kickOffRunnableAnalysisJobs(limit = RUNNABLE_JOB_BATCH_SIZE) {
+  void ensureRunnableAnalysisJobs(limit).catch((error) => {
+    console.warn("[analysis] Failed to kick off runnable jobs.", error);
+  });
 }
 
 export async function createAnalysisTask(
@@ -101,9 +149,15 @@ export async function createAnalysisTask(
 
   const repository = getAnalysisRepository();
   const createdTask = await repository.create(task);
+  const jobRepository = getAnalysisJobRepository();
 
   if (isSupabaseBackedUserId(createdTask.userId)) {
+    await jobRepository.enqueue({
+      analysisId: createdTask.id,
+      userId: createdTask.userId,
+    });
     void ensureAnalysisTaskRunning(createdTask.id);
+    kickOffRunnableAnalysisJobs();
     return toPublicAnalysisTask(createdTask);
   }
 
@@ -123,6 +177,7 @@ export async function getAnalysisTask(id: string): Promise<AnalysisPublicTask> {
 
   if (task.status === "queued" || task.status === "processing") {
     void ensureAnalysisTaskRunning(task.id);
+    kickOffRunnableAnalysisJobs();
   }
 
   return toPublicAnalysisTask(task);
@@ -141,6 +196,7 @@ export async function getAnalysisTaskForUser(
 
   if (task.status === "queued" || task.status === "processing") {
     void ensureAnalysisTaskRunning(task.id);
+    kickOffRunnableAnalysisJobs();
   }
 
   return toPublicAnalysisTask(task);

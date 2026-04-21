@@ -188,6 +188,12 @@ function ChatPanel({
   }
 
   const messages = analysis.chatMessages;
+  const conversationSummary =
+    analysis.chatRuntime?.conversationSummary ??
+    analysis.result.chatState.conversationSummary;
+  const persistedMemoryCount =
+    analysis.chatRuntime?.memoryItems.length ??
+    analysis.result.chatState.memoryItems.length;
   const suggestedQuestions =
     analysis.result.chatContext.suggestedQuestions.length > 0
       ? analysis.result.chatContext.suggestedQuestions
@@ -209,6 +215,20 @@ function ChatPanel({
 
   return (
     <div className="space-y-10">
+      {conversationSummary ? (
+        <section>
+          <SectionTitle>Conversation Summary</SectionTitle>
+          <div className="rounded-xl border border-[color:rgba(255,127,0,0.18)] bg-[color:rgba(255,127,0,0.06)] p-4">
+            <p className="text-sm leading-7 text-[color:var(--text-muted)]">
+              {conversationSummary}
+            </p>
+            <p className="mt-3 font-headline text-[10px] uppercase tracking-[0.2em] text-[color:rgba(240,220,204,0.56)]">
+              Persisted memory items: {persistedMemoryCount}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       <section>
         <SectionTitle>Conversation Context</SectionTitle>
         <div className="space-y-4">
