@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "check:python": "node scripts/run-python-checks.mjs",
     "eval:retrieval": "node scripts/retrieval-eval.mjs"
   },

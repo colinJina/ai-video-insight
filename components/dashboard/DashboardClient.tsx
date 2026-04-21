@@ -11,6 +11,7 @@ import {
 import AiPanel from "@/components/AiPanel";
 import { useAuthModal } from "@/components/auth/AuthModalProvider";
 import VideoSection from "@/components/VideoSection";
+import { readSseEvents } from "@/lib/analysis/sse";
 import type {
   AnalysisPublicTask,
   AnalysisTaskStatus,
@@ -303,16 +304,63 @@ export default function DashboardClient({
     setChatError(null);
 
     try {
-      const response = await requestJson<AnalysisResponse>(
-        `/api/analysis/${activeAnalysisId}/chat`,
-        {
-          method: "POST",
-          body: JSON.stringify({ message }),
+      const response = await fetch(`/api/analysis/${activeAnalysisId}/chat`, {
+        cache: "no-store",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({ message }),
+      });
+
+      if (!response.ok) {
+        let payload: unknown = null;
+
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+
+        const errorMessage =
+          isRecord(payload) &&
+          isRecord(payload.error) &&
+          typeof payload.error.message === "string"
+            ? payload.error.message
+            : "Sending the follow-up question failed.";
+
+        throw new Error(errorMessage);
+      }
+
+      if (!response.body) {
+        throw new Error("The chat stream did not return a readable response body.");
+      }
+
+      let nextAnalysis: AnalysisPublicTask | null = null;
+
+      for await (const event of readSseEvents(response.body)) {
+        if (event.event === "done") {
+          const payload = parseStreamEvent<AnalysisResponse>(event.data);
+          nextAnalysis = payload?.analysis ?? null;
+          continue;
+        }
+
+        if (event.event === "error") {
+          const payload = parseStreamEvent<{ message?: string }>(event.data);
+          throw new Error(
+            payload?.message ?? "Sending the follow-up question failed.",
+          );
+        }
+      }
+
+      if (!nextAnalysis) {
+        throw new Error(
+          "The chat stream ended before the final analysis payload arrived.",
+        );
+      }
 
       startTransition(() => {
-        setAnalysis(response.analysis);
+        setAnalysis(nextAnalysis);
       });
     } catch (error) {
       setChatError(
@@ -371,4 +419,12 @@ export default function DashboardClient({
       </div>
     </div>
   );
+}
+
+function parseStreamEvent<T>(data: string): T | null {
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
 }

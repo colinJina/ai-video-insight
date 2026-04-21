@@ -12,9 +12,8 @@ from app.services.chat_langchain_adapter import LangChainChatModelAdapter
 def _resolve_chat_completions_url(base_url: str) -> str:
     trimmed = base_url.rstrip("/")
 
-    if (
-        trimmed.endswith("/chat/completions")
-        or trimmed.endswith("/v1/chat/completions")
+    if trimmed.endswith("/chat/completions") or trimmed.endswith(
+        "/v1/chat/completions"
     ):
         return trimmed
 
@@ -138,7 +137,9 @@ def _normalize_memory_items(payload: object) -> list[ChatMemoryItem]:
             ChatMemoryItem(
                 kind=normalized_kind,
                 content=normalized_content[:240],
-                source=source.strip() if isinstance(source, str) and source.strip() else None,
+                source=source.strip()
+                if isinstance(source, str) and source.strip()
+                else None,
                 metadata=metadata if isinstance(metadata, dict) else {},
             )
         )
@@ -394,7 +395,9 @@ class ChatModelGateway:
         )
 
         try:
-            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+            with request.urlopen(
+                http_request, timeout=self.timeout_seconds
+            ) as response:
                 response_body = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
