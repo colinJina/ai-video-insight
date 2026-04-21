@@ -1,13 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 
 import type { AppThemePreference, UserSettings } from "@/lib/app/types";
+import {
+  isInlineAvatarSrc,
+  MAX_AVATAR_FILE_BYTES,
+} from "@/lib/settings/avatar";
 
 const GUEST_STORAGE_KEY = "video-ai-guest-settings";
 const FALLBACK_AVATAR =
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80";
+const ALLOWED_AVATAR_FILE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MAX_AVATAR_FILE_SIZE_TEXT = "1 MB";
 
 type SettingsDraft = {
   nickname: string;
@@ -54,11 +60,34 @@ export default function SettingsForm({
   initialSettings: UserSettings | null;
   authenticated: boolean;
 }) {
+  const avatarInputId = useId();
   const [draft, setDraft] = useState<SettingsDraft>(() => toDraft(initialSettings));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [avatarFileName, setAvatarFileName] = useState<string | null>(null);
+  const [isReadingAvatar, setIsReadingAvatar] = useState(false);
   const [isPending, startTransition] = useTransition();
   const avatarPreview = draft.avatarUrl.trim() || FALLBACK_AVATAR;
+
+  const readAvatarFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        if (typeof reader.result !== "string") {
+          reject(new Error("Avatar upload failed. Please try another image."));
+          return;
+        }
+
+        resolve(reader.result);
+      };
+
+      reader.onerror = () => {
+        reject(new Error("Avatar upload failed. Please try another image."));
+      };
+
+      reader.readAsDataURL(file);
+    });
 
   useEffect(() => {
     if (authenticated) {
@@ -83,6 +112,51 @@ export default function SettingsForm({
       // Ignore invalid localStorage payloads.
     }
   }, [authenticated]);
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+    setError(null);
+    setMessage(null);
+
+    if (!file) {
+      return;
+    }
+
+    if (!ALLOWED_AVATAR_FILE_TYPES.includes(file.type)) {
+      setError("Avatar images must be PNG, JPG, WEBP, or GIF files.");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_FILE_BYTES) {
+      setError(`Avatar images must be ${MAX_AVATAR_FILE_SIZE_TEXT} or smaller.`);
+      return;
+    }
+
+    setIsReadingAvatar(true);
+
+    try {
+      const avatarUrl = await readAvatarFile(file);
+      setDraft((current) => ({ ...current, avatarUrl }));
+      setAvatarFileName(file.name);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Avatar upload failed. Please try another image.",
+      );
+    } finally {
+      setIsReadingAvatar(false);
+    }
+  };
+
+  const clearAvatar = () => {
+    setDraft((current) => ({ ...current, avatarUrl: "" }));
+    setAvatarFileName(null);
+    setError(null);
+    setMessage(null);
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -132,6 +206,7 @@ export default function SettingsForm({
                 className="h-full w-full object-cover"
                 height={72}
                 src={avatarPreview}
+                unoptimized={isInlineAvatarSrc(draft.avatarUrl)}
                 width={72}
               />
             </div>
@@ -185,20 +260,47 @@ export default function SettingsForm({
             />
           </label>
 
-          <label className="space-y-3">
+          <div className="space-y-3">
             <span className="font-headline text-[11px] font-bold uppercase tracking-[0.24em] text-[color:var(--primary-strong)]">
-              Avatar URL
+              Avatar Image
             </span>
             <input
-              className="w-full rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] px-4 py-3 text-sm text-foreground outline-none transition-all placeholder:text-[color:rgba(223,192,175,0.42)] focus:border-[color:var(--primary-strong)]"
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, avatarUrl: event.target.value }))
-              }
-              placeholder="https://example.com/avatar.png"
-              type="url"
-              value={draft.avatarUrl}
+              accept={ALLOWED_AVATAR_FILE_TYPES.join(",")}
+              className="sr-only"
+              id={avatarInputId}
+              onChange={(event) => {
+                void handleAvatarChange(event);
+              }}
+              type="file"
             />
-          </label>
+            <div className="rounded-xl border border-[color:rgba(88,66,53,0.3)] bg-[color:rgba(23,12,3,0.8)] p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <label
+                  className="inline-flex cursor-pointer items-center rounded-xl border border-[color:rgba(88,66,53,0.28)] bg-[color:rgba(255,127,0,0.08)] px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] text-white transition-colors hover:bg-[color:rgba(255,127,0,0.16)]"
+                  htmlFor={avatarInputId}
+                >
+                  {isReadingAvatar ? "Uploading..." : "Choose Image"}
+                </label>
+                <button
+                  className="rounded-xl border border-[color:rgba(88,66,53,0.28)] px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-muted)] transition-colors hover:bg-[color:rgba(255,127,0,0.06)] hover:text-white"
+                  onClick={clearAvatar}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+              <p className="mt-3 text-sm leading-7 text-[color:var(--text-muted)]">
+                {avatarFileName
+                  ? `Selected: ${avatarFileName}`
+                  : draft.avatarUrl
+                    ? "Current avatar will be saved to your profile."
+                    : "Upload a PNG, JPG, WEBP, or GIF avatar from this device."}
+              </p>
+              <p className="mt-1 text-xs leading-6 text-[color:rgba(223,192,175,0.56)]">
+                The image is stored directly in your profile record. Maximum size: {MAX_AVATAR_FILE_SIZE_TEXT}.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-5 md:grid-cols-2">
@@ -280,10 +382,10 @@ export default function SettingsForm({
           </p>
           <button
             className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-5 py-3 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02] disabled:opacity-60"
-            disabled={isPending}
+            disabled={isPending || isReadingAvatar}
             type="submit"
           >
-            Save Settings
+            {isReadingAvatar ? "Preparing Avatar..." : "Save Settings"}
           </button>
         </div>
       </section>

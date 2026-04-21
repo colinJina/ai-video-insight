@@ -1,9 +1,18 @@
+import { redirect } from "next/navigation";
+
 import LandingFooter from "@/components/home/LandingFooter";
 import HeroSection from "@/components/home/HeroSection";
 import LandingNavbar from "@/components/home/LandingNavbar";
 import OverviewSection from "@/components/home/OverviewSection";
+import { getOptionalAppSession } from "@/lib/auth/session";
 
-export default function Home() {
+export default async function Home() {
+  const session = await getOptionalAppSession();
+
+  if (session) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="page-shell">
       <LandingNavbar />

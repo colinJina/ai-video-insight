@@ -7,6 +7,7 @@ import {
 } from "@/lib/analysis/errors";
 import type { AppThemePreference } from "@/lib/app/types";
 import { requireAppApiSession } from "@/lib/auth/guards";
+import { normalizeAvatarDataUrl } from "@/lib/settings/avatar";
 import { getSettingsForUser, upsertSettingsForUser } from "@/lib/settings/service";
 
 type SettingsPayload = {
@@ -41,7 +42,7 @@ export async function PUT(request: Request) {
 
     const settings = await upsertSettingsForUser(session.user.id, {
       nickname: body?.nickname?.trim() || null,
-      avatarUrl: body?.avatarUrl?.trim() || null,
+      avatarUrl: normalizeAvatarDataUrl(body?.avatarUrl),
       notificationsEnabled: body?.notificationsEnabled ?? true,
       themePreference: body?.themePreference ?? "system",
     });

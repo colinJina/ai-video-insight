@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import type { AppUser } from "@/lib/app/types";
 import { buildAuthModalHref } from "@/lib/auth/modal";
 import { sanitizeRedirectPath } from "@/lib/auth/utils";
+import { isInlineAvatarSrc } from "@/lib/settings/avatar";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 
@@ -247,6 +248,7 @@ export default function Navbar({
                     className="h-full w-full object-cover"
                     height={36}
                     src={currentUser.avatarUrl || FALLBACK_AVATAR}
+                    unoptimized={isInlineAvatarSrc(currentUser.avatarUrl)}
                     width={36}
                   />
                 </div>
