@@ -122,6 +122,10 @@ export async function markNotificationAsRead(userId: string, notificationId: str
   return getNotificationRepository().markAsRead(userId, notificationId);
 }
 
+export async function markAnalysisNotificationsAsRead(userId: string, analysisId: string) {
+  return getNotificationRepository().markRelatedAnalysisAsRead(userId, analysisId);
+}
+
 export async function markAllNotificationsAsRead(userId: string) {
   return getNotificationRepository().markAllAsRead(userId);
 }

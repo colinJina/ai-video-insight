@@ -152,6 +152,17 @@
     filter: none;
     transition: none;
   }
+
+  .thinking-orb,
+  .thinking-text,
+  .thinking-dot {
+    animation: none;
+  }
+
+  .thinking-text {
+    color: var(--text-muted);
+    background: none;
+  }
 }
 
 .parallax-layer {
@@ -215,6 +226,50 @@
   box-shadow: 0 0 18px rgba(255, 182, 136, 0.35);
   vertical-align: -0.08em;
   animation: typewriter-caret 1s ease-in-out infinite;
+}
+
+.thinking-orb {
+  box-shadow:
+    0 0 0 0 rgba(255, 127, 0, 0.24),
+    0 0 18px rgba(255, 127, 0, 0.34);
+  animation: thinking-orb 1.8s ease-in-out infinite;
+}
+
+.thinking-text {
+  background: linear-gradient(
+    90deg,
+    rgba(223, 192, 175, 0.6) 0%,
+    rgba(255, 240, 227, 0.96) 45%,
+    rgba(223, 192, 175, 0.68) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: thinking-text 2.8s linear infinite;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.thinking-dot {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: rgba(255, 182, 136, 0.92);
+  box-shadow: 0 0 12px rgba(255, 127, 0, 0.22);
+  animation: thinking-dot 1.15s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.32s;
 }
 
 @keyframes pulse-dot {
@@ -292,6 +347,46 @@
   66% {
     opacity: 1;
     transform: scaleY(1);
+  }
+}
+
+@keyframes thinking-orb {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.88);
+    box-shadow:
+      0 0 0 0 rgba(255, 127, 0, 0.28),
+      0 0 18px rgba(255, 127, 0, 0.22);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.16);
+    box-shadow:
+      0 0 0 10px rgba(255, 127, 0, 0),
+      0 0 24px rgba(255, 127, 0, 0.38);
+  }
+}
+
+@keyframes thinking-text {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+@keyframes thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.32;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-0.2rem);
   }
 }
 

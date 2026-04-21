@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import AnalysisConversation from "@/components/analysis/AnalysisConversation";
+import MarkAnalysisNotificationsRead from "@/components/analysis/MarkAnalysisNotificationsRead";
 import ExportPdfButton from "@/components/analysis/ExportPdfButton";
 import AppShell from "@/components/app/AppShell";
 import StatusBadge from "@/components/app/StatusBadge";
@@ -29,6 +30,7 @@ export default async function AnalysisDetailPage({
 
   return (
     <AppShell compact>
+      {session ? <MarkAnalysisNotificationsRead analysisId={analysis.id} /> : null}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-[color:rgba(88,66,53,0.18)] pb-6">
         <div>
           <p className="font-headline text-[11px] font-bold uppercase tracking-[0.3em] text-[color:var(--primary-strong)]">

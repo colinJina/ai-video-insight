@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -104,6 +103,24 @@ export default function NotificationsList({
     }
   };
 
+  const openAnalysis = async (analysisId: string) => {
+    setError(null);
+
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: "analysis", analysisId }),
+      });
+    } catch {
+      // The detail page will retry this mark-as-read on mount.
+    }
+
+    router.push(`/analysis/${analysisId}`);
+  };
+
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -137,6 +154,7 @@ export default function NotificationsList({
       <div className="space-y-4">
         {notifications.map((notification) => {
           const meta = TYPE_META[notification.type];
+          const relatedAnalysisId = notification.relatedAnalysisId;
 
           return (
             <article
@@ -165,7 +183,7 @@ export default function NotificationsList({
                       <span className="rounded-full border border-[color:rgba(88,66,53,0.22)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--text-muted)]">
                         {notification.readAt ? "Read" : "Unread"}
                       </span>
-                      {notification.relatedAnalysisId ? (
+                      {relatedAnalysisId ? (
                         <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
                           Linked Analysis
                         </span>
@@ -179,13 +197,16 @@ export default function NotificationsList({
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                {notification.relatedAnalysisId ? (
-                  <Link
+                {relatedAnalysisId ? (
+                  <button
                     className="rounded-xl bg-gradient-to-br from-primary to-[color:var(--primary-strong)] px-4 py-2.5 font-headline text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--on-primary)] transition-transform hover:scale-[1.02]"
-                    href={`/analysis/${notification.relatedAnalysisId}`}
+                    onClick={() => {
+                      void openAnalysis(relatedAnalysisId);
+                    }}
+                    type="button"
                   >
                     View Analysis
-                  </Link>
+                  </button>
                 ) : null}
                 {!notification.readAt ? (
                   <button

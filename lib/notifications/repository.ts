@@ -16,6 +16,7 @@ export interface NotificationRepository {
   listByUser(userId: string): Promise<AppNotification[]>;
   countUnread(userId: string): Promise<number>;
   markAsRead(userId: string, notificationId: string): Promise<AppNotification | null>;
+  markRelatedAnalysisAsRead(userId: string, analysisId: string): Promise<number>;
   markAllAsRead(userId: string): Promise<void>;
 }
 
@@ -75,6 +76,27 @@ export class MemoryNotificationRepository implements NotificationRepository {
 
     notificationStore.set(notificationId, next);
     return cloneValue(next);
+  }
+
+  async markRelatedAnalysisAsRead(userId: string, analysisId: string) {
+    const now = new Date().toISOString();
+    let markedCount = 0;
+
+    for (const item of notificationStore.values()) {
+      if (
+        item.userId === userId &&
+        item.relatedAnalysisId === analysisId &&
+        !item.readAt
+      ) {
+        notificationStore.set(item.id, {
+          ...item,
+          readAt: now,
+        });
+        markedCount += 1;
+      }
+    }
+
+    return markedCount;
   }
 
   async markAllAsRead(userId: string) {
@@ -202,6 +224,25 @@ export class SupabaseNotificationRepository implements NotificationRepository {
     };
   }
 
+  async markRelatedAnalysisAsRead(userId: string, analysisId: string) {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("user_notifications")
+      .update({
+        read_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("related_analysis_id", analysisId)
+      .is("read_at", null)
+      .select("id");
+
+    if (error) {
+      throw error;
+    }
+
+    return data.length;
+  }
+
   async markAllAsRead(userId: string) {
     const supabase = createSupabaseAdminClient();
     const { error } = await supabase
@@ -291,6 +332,16 @@ const repository: NotificationRepository = {
       "markAllAsRead",
       () => memoryRepository.markAllAsRead(userId),
       useSupabase ? () => supabaseRepository.markAllAsRead(userId) : null,
+    );
+  },
+  markRelatedAnalysisAsRead(userId, analysisId) {
+    const useSupabase = supabaseRepository && isSupabaseBackedUserId(userId);
+    return runNotificationRepository(
+      "markRelatedAnalysisAsRead",
+      () => memoryRepository.markRelatedAnalysisAsRead(userId, analysisId),
+      useSupabase
+        ? () => supabaseRepository.markRelatedAnalysisAsRead(userId, analysisId)
+        : null,
     );
   },
 };

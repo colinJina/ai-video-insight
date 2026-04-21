@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { startTransition, useState } from "react";
 
 import { readSseEvents } from "@/lib/analysis/sse";
@@ -97,6 +98,49 @@ function LatestReplyCitations({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ThinkingReplyPlaceholder({
+  children,
+}: {
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      aria-live="polite"
+      className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="thinking-orb h-2.5 w-2.5 rounded-full bg-[color:var(--primary-strong)]"
+        />
+        <div className="min-w-0">
+          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--primary-strong)]">
+            Thinking
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-7 text-[color:var(--text-muted)]">
+            <span className="thinking-text">
+              Thinking through the transcript and assembling an answer
+            </span>
+            <span aria-hidden="true" className="thinking-dots">
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.5)]">
+            Streaming reply
+          </p>
+        </div>
+      </div>
+      {children ? (
+        <div className="mt-4 border-t border-[color:rgba(88,66,53,0.16)] pt-4 text-sm leading-7 text-[color:var(--text-muted)]">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -281,10 +325,9 @@ export default function AnalysisConversation({
       ) : null}
 
       {isPending ? (
-        <div className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4 text-sm leading-7 text-[color:var(--text-muted)]">
-          {streamedAssistantAnswer ||
-            "Thinking through the transcript and assembling an answer..."}
-        </div>
+        <ThinkingReplyPlaceholder>
+          {streamedAssistantAnswer || null}
+        </ThinkingReplyPlaceholder>
       ) : null}
 
       {suggestedQuestions.length > 0 ? (
