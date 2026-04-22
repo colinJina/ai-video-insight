@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     allowed_origins: str = Field(default="http://localhost:3000", alias="ALLOWED_ORIGINS")
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    pipeline_debug_enabled: bool | None = Field(
+        default=None, alias="PIPELINE_DEBUG_ENABLED"
+    )
     chat_provider: str = Field(default="stub", alias="CHAT_PROVIDER")
     langchain_enabled: bool = Field(default=False, alias="LANGCHAIN_ENABLED")
     chat_model_adapter: str | None = Field(default=None, alias="CHAT_MODEL_ADAPTER")
@@ -29,6 +32,13 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def is_pipeline_debug_enabled(self) -> bool:
+        if self.pipeline_debug_enabled is not None:
+            return self.pipeline_debug_enabled
+
+        return self.app_env.lower() != "production"
 
 
 @lru_cache

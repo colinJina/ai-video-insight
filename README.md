@@ -10,6 +10,7 @@ AI Video Insight is a dual-service project built with Next.js and a Python FastA
 - Support multi-turn Q&A against the current analysis
 - Forward chat requests from Next.js to a Python AI backend
 - Inject short-term memory, long-term analysis context, and compressed conversation summary into chat
+- Support a LangGraph-powered ReAct-style chat loop that can inspect summary, outline, memory, and retrieved transcript evidence before answering
 - Export the current analysis and chat history as a downloadable PDF
 
 ## Tech Stack
@@ -36,6 +37,7 @@ AI Video Insight is a dual-service project built with Next.js and a Python FastA
 ### Python Backend
 
 - `POST /api/chat/respond` for chat orchestration
+- LangGraph-backed ReAct-style tool loop for grounded follow-up answers
 - request-driven memory loading and conversation summary compression
 - `POST /api/report/pdf` for PDF generation
 - clean service boundaries for future real retrieval and summarization models
@@ -80,6 +82,7 @@ AI_BASE_URL=
 AI_API_KEY=
 AI_MODEL=
 AI_TIMEOUT_MS=25000
+CHAT_MODEL_ADAPTER=langgraph
 
 # Python backend
 PYTHON_BACKEND_BASE_URL=http://127.0.0.1:8001
@@ -91,6 +94,7 @@ YT_DLP_BIN=yt-dlp
 ```
 
 `PYTHON_BACKEND_BASE_URL` links the Next.js Route Handlers to the FastAPI backend for chat and PDF export.
+Set `CHAT_MODEL_ADAPTER=langgraph` to enable the current ReAct-style chat path in the Python backend.
 
 ## Chat, Memory, and PDF Flow
 
@@ -105,8 +109,9 @@ YT_DLP_BIN=yt-dlp
    - request-driven memory items
 3. Next.js forwards that payload to the Python backend at `POST /api/chat/respond`.
 4. Python assembles short-term memory, long-term context, memory hits, and compressed conversation summary.
-5. Python returns `answer`, `memory_hits`, `conversation_summary`, and normalized memory items.
-6. Next.js appends the assistant reply to `chatMessages` and keeps extra runtime chat metadata available for future UI work.
+5. When `CHAT_MODEL_ADAPTER=langgraph`, Python runs a ReAct-style tool loop that can inspect the current analysis summary, outline, memory items, and retrieved transcript chunks before answering.
+6. Python returns `answer`, `memory_hits`, `conversation_summary`, and normalized memory items.
+7. Next.js appends the assistant reply to `chatMessages` and keeps extra runtime chat metadata available for future UI work.
 
 ### PDF flow
 

@@ -6,6 +6,11 @@ import {
   getPublicErrorMessage,
   ValidationError,
 } from "@/lib/analysis/errors";
+import {
+  createPipelineTraceId,
+  logPipelineEvent,
+  previewText,
+} from "@/lib/analysis/debug";
 import { createAnalysisTask } from "@/lib/analysis/services/tasks";
 import { requireAppApiSession } from "@/lib/auth/guards";
 import type { CreateAnalysisInput } from "@/lib/analysis/types";
@@ -17,6 +22,8 @@ const NO_STORE_HEADERS = {
 };
 
 export async function POST(request: Request) {
+  const traceId = createPipelineTraceId("analyze");
+
   try {
     const session = await requireAppApiSession();
     const contentType = request.headers.get("content-type") ?? "";
@@ -45,9 +52,31 @@ export async function POST(request: Request) {
       };
     }
 
+    logPipelineEvent("next.analyze", "received_analysis_request", {
+      traceId,
+      userId: session.user.id,
+      contentType,
+      videoUrl: previewText(input.videoUrl),
+      uploadedVideo: input.uploadedVideo
+        ? {
+            fileName: input.uploadedVideo.fileName,
+            mimeType: input.uploadedVideo.mimeType,
+            fileSizeBytes: input.uploadedVideo.fileSizeBytes,
+          }
+        : null,
+    });
+
     const analysis = await createAnalysisTask({
       ...input,
       userId: session.user.id,
+    });
+
+    logPipelineEvent("next.analyze", "analysis_task_created", {
+      traceId,
+      analysisId: analysis.id,
+      status: analysis.status,
+      title: analysis.result?.title ?? analysis.video.title,
+      transcriptSource: analysis.transcriptSource,
     });
 
     return NextResponse.json(
@@ -58,6 +87,12 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+    logPipelineEvent("next.analyze", "analysis_request_failed", {
+      traceId,
+      errorCode: getErrorCode(error),
+      message: getPublicErrorMessage(error),
+    });
+
     return NextResponse.json(
       {
         error: {

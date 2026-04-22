@@ -2,6 +2,11 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
+import {
+  createPipelineTraceId,
+  logPipelineEvent,
+  previewText,
+} from "@/lib/analysis/debug";
 import { NotFoundError, ValidationError } from "@/lib/analysis/errors";
 import { getAnalysisJobRepository } from "@/lib/analysis/job-repository";
 import {
@@ -127,10 +132,35 @@ function kickOffRunnableAnalysisJobs(limit = RUNNABLE_JOB_BATCH_SIZE) {
 export async function createAnalysisTask(
   input: CreateAnalysisInput & { userId: string },
 ): Promise<AnalysisPublicTask> {
+  const traceId = createPipelineTraceId("task");
+
+  logPipelineEvent("next.tasks", "create_analysis_task_started", {
+    traceId,
+    userId: input.userId,
+    videoUrl: previewText(input.videoUrl ?? null),
+    uploadedVideo: input.uploadedVideo
+      ? {
+          fileName: input.uploadedVideo.fileName,
+          mimeType: input.uploadedVideo.mimeType,
+          fileSizeBytes: input.uploadedVideo.fileSizeBytes,
+        }
+      : null,
+  });
+
   const video = input.uploadedVideo
     ? await persistUploadedVideo(input.uploadedVideo)
     : await extractVideoMetadata(assertValidVideoUrl(input.videoUrl ?? "").toString());
   const now = new Date().toISOString();
+
+  logPipelineEvent("next.tasks", "video_metadata_resolved", {
+    traceId,
+    title: video.title,
+    provider: video.provider,
+    host: video.host,
+    durationSeconds: video.durationSeconds,
+    playableUrl: previewText(video.playableUrl),
+    posterUrl: previewText(video.posterUrl),
+  });
 
   const task: AnalysisTask = {
     id: randomUUID(),
@@ -151,6 +181,13 @@ export async function createAnalysisTask(
   const createdTask = await repository.create(task);
   const jobRepository = getAnalysisJobRepository();
 
+  logPipelineEvent("next.tasks", "analysis_task_persisted", {
+    traceId,
+    analysisId: createdTask.id,
+    status: createdTask.status,
+    createdAt: createdTask.createdAt,
+  });
+
   if (isSupabaseBackedUserId(createdTask.userId)) {
     await jobRepository.enqueue({
       analysisId: createdTask.id,
@@ -158,12 +195,23 @@ export async function createAnalysisTask(
     });
     void ensureAnalysisTaskRunning(createdTask.id);
     kickOffRunnableAnalysisJobs();
+    logPipelineEvent("next.tasks", "analysis_task_enqueued", {
+      traceId,
+      analysisId: createdTask.id,
+      userId: createdTask.userId,
+      executionMode: "background_job",
+    });
     return toPublicAnalysisTask(createdTask);
   }
 
   await ensureAnalysisTaskRunning(createdTask.id);
 
   const completedTask = await repository.findById(createdTask.id);
+  logPipelineEvent("next.tasks", "analysis_task_completed_inline", {
+    traceId,
+    analysisId: createdTask.id,
+    finalStatus: completedTask?.status ?? createdTask.status,
+  });
   return toPublicAnalysisTask(completedTask ?? createdTask);
 }
 

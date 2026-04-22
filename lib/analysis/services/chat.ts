@@ -3,6 +3,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/lib/analysis/errors";
+import { logPipelineEvent, previewText } from "@/lib/analysis/debug";
 import {
   getRetrievalCandidateLimit,
   getRetrievalDenseWeight,
@@ -780,6 +781,20 @@ export async function prepareAnalysisChatTurn(
     context.payload,
   );
 
+  logPipelineEvent("next.chat.service", "chat_context_built", {
+    analysisId: id,
+    message: previewText(userMessage.content),
+    retrievalDebug: context.retrievalDebug,
+    citationCount: context.citations.length,
+    transcriptExcerpt: previewText(context.payload.transcriptExcerpt, 320),
+    storedConversationSummary: previewText(
+      context.payload.storedConversationSummary,
+      240,
+    ),
+    requestMemoryKinds: context.payload.memoryItems.map((item) => item.kind),
+    storedMemoryKinds: context.payload.storedMemoryItems.map((item) => item.kind),
+  });
+
   return {
     id,
     task,
@@ -822,6 +837,19 @@ export async function finalizeAnalysisChatTurn(
   if (!updatedTask) {
     throw new NotFoundError("Could not find the requested analysis task.");
   }
+
+  logPipelineEvent("next.chat.service", "chat_turn_persisted", {
+    analysisId: preparedTurn.id,
+    answer: previewText(pythonResponse.answer, 320),
+    memoryHitCount: pythonResponse.memoryHits.length,
+    memoryUpdateCount: pythonResponse.memoryUpdates.length,
+    nextConversationSummary: previewText(
+      nextChatState.conversationSummary,
+      240,
+    ),
+    nextStoredMemoryCount: nextChatState.memoryItems.length,
+    totalChatMessages: updatedTask.chatMessages.length,
+  });
 
   return {
     ...toPublicAnalysisTask(updatedTask),

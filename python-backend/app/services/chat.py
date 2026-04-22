@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from app.core.logging import get_logger
+from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.models.chat import (
     ChatContext,
     ChatMemoryItem,
@@ -45,10 +47,20 @@ class ChatService:
         self.summarizer = summarizer or ConversationSummarizer()
         self.model_gateway = model_gateway or chat_model_gateway
         self.response_generator = response_generator or ChatResponseGenerator()
+        self.logger = get_logger("app.services.chat")
 
     def respond(self, request: ChatRequest) -> ChatResponse:
         prepared_turn = self._prepare_turn(request)
         model_answer = self.model_gateway.generate(prepared_turn.context)
+        log_pipeline_event(
+            self.logger,
+            "chat_model_answer_generated",
+            {
+                "analysisId": prepared_turn.chat_input.analysis_id,
+                "answer": preview_text(model_answer, 320),
+                "memoryHitCount": len(prepared_turn.memory_hits),
+            },
+        )
 
         return self._build_final_response(
             prepared_turn,
@@ -58,6 +70,18 @@ class ChatService:
     def stream_respond(self, request: ChatRequest):
         prepared_turn = self._prepare_turn(request)
         model_chunks = self.model_gateway.generate_stream(prepared_turn.context)
+        log_pipeline_event(
+            self.logger,
+            "chat_stream_started",
+            {
+                "analysisId": prepared_turn.chat_input.analysis_id,
+                "message": preview_text(prepared_turn.chat_input.message),
+                "memoryHitCount": len(prepared_turn.memory_hits),
+                "conversationSummary": preview_text(
+                    prepared_turn.conversation_summary
+                ),
+            },
+        )
 
         if model_chunks:
             answer_parts: list[str] = []
@@ -88,6 +112,18 @@ class ChatService:
             prepared_turn,
             answer,
         )
+        log_pipeline_event(
+            self.logger,
+            "chat_stream_completed",
+            {
+                "analysisId": prepared_turn.chat_input.analysis_id,
+                "answer": preview_text(final_response.answer, 320),
+                "memoryUpdateCount": len(final_response.memory_updates),
+                "conversationSummary": preview_text(
+                    final_response.conversation_summary
+                ),
+            },
+        )
         yield {
             "event": "final",
             "data": final_response.model_dump(by_alias=True),
@@ -101,12 +137,45 @@ class ChatService:
 
     def _prepare_turn(self, request: ChatRequest) -> PreparedChatTurn:
         chat_input = self.sanitizer.sanitize(request)
+        log_pipeline_event(
+            self.logger,
+            "chat_input_sanitized",
+            {
+                "analysisId": chat_input.analysis_id,
+                "userId": chat_input.user_id,
+                "message": preview_text(chat_input.message),
+                "recentMessageCount": len(chat_input.recent_messages),
+                "storedConversationSummary": preview_text(
+                    chat_input.stored_conversation_summary
+                ),
+            },
+        )
         memory_items, memory_hits = self.load_memory(chat_input)
+        log_pipeline_event(
+            self.logger,
+            "chat_memory_loaded",
+            {
+                "analysisId": chat_input.analysis_id,
+                "memoryItemCount": len(memory_items),
+                "memoryHits": memory_hits,
+                "memoryKinds": [item.kind for item in memory_items],
+            },
+        )
         (
             retained_recent_messages,
             conversation_summary,
             conversation_was_compressed,
         ) = self.summarizer.summarize(chat_input, self.model_gateway)
+        log_pipeline_event(
+            self.logger,
+            "conversation_summary_prepared",
+            {
+                "analysisId": chat_input.analysis_id,
+                "retainedRecentMessages": len(retained_recent_messages),
+                "conversationWasCompressed": conversation_was_compressed,
+                "conversationSummary": preview_text(conversation_summary, 320),
+            },
+        )
         context = self.context_builder.build(
             chat_input,
             memory_items,
@@ -114,6 +183,17 @@ class ChatService:
             retained_recent_messages,
             conversation_summary,
             conversation_was_compressed,
+        )
+        log_pipeline_event(
+            self.logger,
+            "chat_context_built",
+            {
+                "analysisId": chat_input.analysis_id,
+                "assembledContext": preview_text(context.assembled_context, 480),
+                "transcriptExcerpt": preview_text(context.transcript_excerpt, 320),
+                "outlineCount": len(context.outline),
+                "keyPointCount": len(context.key_points),
+            },
         )
 
         return PreparedChatTurn(
@@ -151,6 +231,22 @@ class ChatService:
             draft_response.answer,
             prepared_turn.conversation_summary,
             self.model_gateway,
+        )
+        log_pipeline_event(
+            self.logger,
+            "chat_response_finalized",
+            {
+                "analysisId": prepared_turn.chat_input.analysis_id,
+                "answer": preview_text(final_response.answer, 320),
+                "memoryUpdateCount": len(final_response.memory_updates),
+                "memoryUpdateKinds": [
+                    item.kind for item in final_response.memory_updates
+                ],
+                "conversationSummary": preview_text(
+                    final_response.conversation_summary,
+                    320,
+                ),
+            },
         )
 
         return final_response

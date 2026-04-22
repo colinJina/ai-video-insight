@@ -1,4 +1,6 @@
 from app.models.chat import ChatMessage, SanitizedChatInput
+from app.core.logging import get_logger
+from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.services.chat_model import ChatModelGateway
 
 
@@ -12,6 +14,7 @@ class ConversationSummarizer:
     ) -> None:
         self.compression_threshold = compression_threshold
         self.retained_recent_messages = retained_recent_messages
+        self.logger = get_logger("app.services.chat_summary")
 
     def summarize(
         self,
@@ -22,9 +25,26 @@ class ConversationSummarizer:
         stored_summary = chat_input.stored_conversation_summary
 
         if len(recent_messages) <= self.compression_threshold and not stored_summary:
+            log_pipeline_event(
+                self.logger,
+                "conversation_summary_skipped",
+                {
+                    "analysisId": chat_input.analysis_id,
+                    "recentMessageCount": len(recent_messages),
+                },
+            )
             return recent_messages, None, False
 
         if len(recent_messages) <= self.retained_recent_messages:
+            log_pipeline_event(
+                self.logger,
+                "conversation_summary_reused",
+                {
+                    "analysisId": chat_input.analysis_id,
+                    "recentMessageCount": len(recent_messages),
+                    "storedSummary": preview_text(stored_summary, 320),
+                },
+            )
             return recent_messages, stored_summary, bool(stored_summary)
 
         retained_messages = recent_messages[-self.retained_recent_messages :]
@@ -33,6 +53,16 @@ class ConversationSummarizer:
             previous_summary=stored_summary,
             compressed_messages=compressed_messages,
             model_gateway=model_gateway,
+        )
+        log_pipeline_event(
+            self.logger,
+            "conversation_summary_compressed",
+            {
+                "analysisId": chat_input.analysis_id,
+                "compressedMessageCount": len(compressed_messages),
+                "retainedMessageCount": len(retained_messages),
+                "conversationSummary": preview_text(conversation_summary, 320),
+            },
         )
         return retained_messages, conversation_summary, bool(conversation_summary)
 

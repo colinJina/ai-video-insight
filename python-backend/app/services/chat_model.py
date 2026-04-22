@@ -4,6 +4,8 @@ from urllib import error, request
 
 from app.core.config import get_settings
 from app.core.exceptions import ServiceUnavailableError
+from app.core.logging import get_logger
+from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.models.chat import ChatContext, ChatMemoryItem, ChatMessage
 from app.services.chat_langgraph_adapter import LangGraphChatModelAdapter
 from app.services.chat_langchain_adapter import LangChainChatModelAdapter
@@ -183,8 +185,22 @@ class ChatModelGateway:
             model=self.model,
             timeout_seconds=self.timeout_seconds,
         )
+        self.logger = get_logger("app.services.chat_model")
 
     def generate(self, context: ChatContext) -> str | None:
+        log_pipeline_event(
+            self.logger,
+            "model_generate_called",
+            {
+                "analysisId": context.analysis_id,
+                "adapter": self.adapter_name,
+                "configured": self._is_configured(),
+                "userPromptPreview": preview_text(
+                    self._build_user_prompt(context),
+                    480,
+                ),
+            },
+        )
         if self._uses_langgraph_adapter():
             return self.langgraph_adapter.generate(
                 self._build_system_prompt(),
@@ -223,6 +239,16 @@ class ChatModelGateway:
     def generate_stream(self, context: ChatContext) -> Iterable[str] | None:
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(context)
+        log_pipeline_event(
+            self.logger,
+            "model_generate_stream_called",
+            {
+                "analysisId": context.analysis_id,
+                "adapter": self.adapter_name,
+                "configured": self._is_configured(),
+                "userPromptPreview": preview_text(user_prompt, 480),
+            },
+        )
 
         if self._uses_langgraph_adapter():
             chunks = self.langgraph_adapter.generate_stream(

@@ -6,6 +6,11 @@ import {
   getPublicErrorMessage,
   ValidationError,
 } from "@/lib/analysis/errors";
+import {
+  createPipelineTraceId,
+  logPipelineEvent,
+  previewText,
+} from "@/lib/analysis/debug";
 import { encodeSseEvent, readSseEvents } from "@/lib/analysis/sse";
 import {
   finalizeAnalysisChatTurn,
@@ -31,11 +36,27 @@ export async function POST(
   request: Request,
   context: AnalysisRouteContext,
 ) {
+  const traceId = createPipelineTraceId("chat");
+
   try {
     const { id } = await context.params;
     const body = await readChatInput(request);
+    logPipelineEvent("next.chat.route", "received_chat_request", {
+      traceId,
+      analysisId: id,
+      message: previewText(body.message ?? null),
+    });
+
     const preparedTurn = await prepareAnalysisChatTurn(id, {
       message: body.message ?? "",
+    });
+    logPipelineEvent("next.chat.route", "prepared_chat_turn", {
+      traceId,
+      analysisId: id,
+      recentMessageCount: preparedTurn.pythonRequest.recentMessages.length,
+      memoryItemCount: preparedTurn.pythonRequest.memoryItems.length,
+      storedMemoryItemCount: preparedTurn.pythonRequest.storedMemoryItems.length,
+      transcriptExcerpt: previewText(preparedTurn.pythonRequest.transcriptExcerpt, 320),
     });
     const pythonResponse = await requestPythonChatAnswerStream(
       preparedTurn.pythonRequest,
@@ -81,9 +102,25 @@ export async function POST(
             preparedTurn,
             finalPayload,
           );
+          logPipelineEvent("next.chat.route", "chat_turn_finalized", {
+            traceId,
+            analysisId: id,
+            answer: previewText(finalPayload.answer, 320),
+            memoryUpdateCount: finalPayload.memoryUpdates.length,
+            memoryHitCount: finalPayload.memoryHits.length,
+            conversationSummary: previewText(
+              finalPayload.conversationSummary,
+              240,
+            ),
+          });
           controller.enqueue(encodeChunk("done", { analysis }));
           controller.close();
         } catch (error) {
+          logPipelineEvent("next.chat.route", "chat_stream_failed", {
+            traceId,
+            analysisId: id,
+            message: getPublicErrorMessage(error),
+          });
           controller.enqueue(
             encodeChunk("error", {
               message: getPublicErrorMessage(error),
@@ -94,6 +131,11 @@ export async function POST(
       },
     });
 
+    logPipelineEvent("next.chat.route", "python_stream_connected", {
+      traceId,
+      analysisId: id,
+    });
+
     return new Response(stream, {
       headers: {
         ...NO_STORE_HEADERS,
@@ -102,6 +144,12 @@ export async function POST(
       },
     });
   } catch (error) {
+    logPipelineEvent("next.chat.route", "chat_request_failed", {
+      traceId,
+      errorCode: getErrorCode(error),
+      message: getPublicErrorMessage(error),
+    });
+
     return NextResponse.json(
       {
         error: {

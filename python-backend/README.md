@@ -16,7 +16,7 @@ The goal is to keep the service easy to explain, easy to extend, and ready for f
 - structured application logging
 - unified exception handling with consistent JSON error responses
 - modular service layer for chat, memory hooks, and PDF generation
-- switchable model adapter layer for direct HTTP or LangChain-backed model calls
+- switchable model adapter layer for direct HTTP, LangChain, or LangGraph-backed model calls
 
 ## Project Structure
 
@@ -112,7 +112,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 LOG_LEVEL=INFO
 CHAT_PROVIDER=stub
 LANGCHAIN_ENABLED=false
-CHAT_MODEL_ADAPTER=http
+CHAT_MODEL_ADAPTER=langgraph
 AI_BASE_URL=
 AI_API_KEY=
 AI_MODEL=
@@ -123,6 +123,7 @@ Notes:
 
 - `LOG_LEVEL` controls application logging verbosity.
 - `CHAT_PROVIDER` is a simple label exposed by the root endpoint so you can show which chat backend is active.
+- `CHAT_MODEL_ADAPTER=langgraph` is the recommended setting for the app's current AI chat because it enables a ReAct-style tool loop over the prepared video-analysis context.
 - `CHAT_MODEL_ADAPTER` accepts `http`, `langchain`, or `langgraph`. If omitted, the backend falls back to `LANGCHAIN_ENABLED=true` and otherwise uses `http`.
 - The LangChain adapter reuses the same `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, and `AI_TIMEOUT_MS` settings as the direct HTTP adapter.
 - The LangGraph adapter uses the same model settings, but wraps answer generation in a real tool-calling loop over the current analysis context.
@@ -151,14 +152,24 @@ Example response:
 
 ### `POST /api/chat/respond`
 
-Accepts structured video-analysis chat context and returns a deterministic placeholder answer.
+Accepts structured video-analysis chat context and returns a grounded answer for the current video workspace.
 
 Current context assembly includes:
 
 - recent messages
+- rolling conversation summary
 - analysis summary
 - transcript excerpt
+- outline
+- key points
 - request-driven memory items
+
+When `CHAT_MODEL_ADAPTER=langgraph`, answer generation uses a ReAct-style tool loop that can inspect:
+
+- the current analysis summary and key points
+- the structured outline with timestamps
+- durable memory items from earlier turns
+- retrieved transcript chunks for evidence-focused questions
 
 Example request:
 
@@ -266,7 +277,7 @@ Current logging behavior:
 
 This is intentionally minimal, but it is enough to demonstrate that the service is observable and debuggable.
 
-## LangChain Adapter Layer
+## Adapter Layer
 
 The files [app/services/chat_model.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_model.py), [app/services/chat_langchain_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langchain_adapter.py), and [app/services/chat_langgraph_adapter.py](/C:/Users/31744/Desktop/ai-video-insight/python-backend/app/services/chat_langgraph_adapter.py) now provide a switchable model adapter layer.
 

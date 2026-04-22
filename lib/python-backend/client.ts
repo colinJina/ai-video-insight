@@ -1,4 +1,5 @@
 import { ExternalServiceError, TimeoutError } from "@/lib/analysis/errors";
+import { logPipelineEvent, previewText } from "@/lib/analysis/debug";
 import { fetchWithTimeout, isRecord } from "@/lib/analysis/utils";
 import {
   getPythonBackendBaseUrl,
@@ -267,6 +268,16 @@ async function requestPythonBackendStream(
 export async function requestPythonChatAnswer(
   payload: PythonChatRequest,
 ): Promise<PythonChatResponse> {
+  logPipelineEvent("next.python-client", "request_python_chat_answer", {
+    analysisId: payload.analysisId ?? null,
+    userId: payload.userId ?? null,
+    message: previewText(payload.message),
+    recentMessageCount: payload.recentMessages.length,
+    memoryItemCount: payload.memoryItems.length,
+    storedMemoryItemCount: payload.storedMemoryItems.length,
+    transcriptExcerpt: previewText(payload.transcriptExcerpt, 320),
+  });
+
   const body = await requestPythonBackendJson(
     {
       pathname: "/api/chat/respond",
@@ -311,6 +322,16 @@ export async function requestPythonChatAnswer(
 export async function requestPythonChatAnswerStream(
   payload: PythonChatRequest,
 ): Promise<Response> {
+  logPipelineEvent("next.python-client", "request_python_chat_answer_stream", {
+    analysisId: payload.analysisId ?? null,
+    userId: payload.userId ?? null,
+    message: previewText(payload.message),
+    recentMessageCount: payload.recentMessages.length,
+    memoryItemCount: payload.memoryItems.length,
+    storedMemoryItemCount: payload.storedMemoryItems.length,
+    transcriptExcerpt: previewText(payload.transcriptExcerpt, 320),
+  });
+
   return requestPythonBackendStream({
     pathname: "/api/chat/respond/stream",
     init: {

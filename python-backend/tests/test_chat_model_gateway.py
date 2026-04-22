@@ -116,6 +116,39 @@ def test_gateway_generate_delegates_to_langgraph_adapter(monkeypatch):
     assert "Latest user question" in captured["user_prompt"]
 
 
+def test_gateway_generate_stream_delegates_to_langgraph_adapter(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.chat_model.get_settings",
+        lambda: make_settings(chat_model_adapter="langgraph"),
+    )
+    gateway = ChatModelGateway()
+    context = make_context()
+    captured = {}
+
+    def fake_generate_stream(
+        system_prompt: str,
+        user_prompt: str,
+        received_context: ChatContext,
+    ):
+        captured["system_prompt"] = system_prompt
+        captured["user_prompt"] = user_prompt
+        captured["context"] = received_context
+        return ["langgraph", "-stream"]
+
+    monkeypatch.setattr(
+        gateway.langgraph_adapter,
+        "generate_stream",
+        fake_generate_stream,
+    )
+
+    chunks = gateway.generate_stream(context)
+
+    assert list(chunks or []) == ["langgraph", "-stream"]
+    assert captured["context"] is context
+    assert "video analysis product" in captured["system_prompt"]
+    assert "Latest user question" in captured["user_prompt"]
+
+
 def test_gateway_generate_uses_http_path_when_selected(monkeypatch):
     monkeypatch.setattr(
         "app.services.chat_model.get_settings",

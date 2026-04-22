@@ -1,9 +1,14 @@
 from app.models.chat import ChatContext, ChatMemoryItem, SanitizedChatInput
+from app.core.logging import get_logger
+from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.services.chat_model import ChatModelGateway
 
 
 class ChatMemoryUpdater:
     """Extracts durable memory candidates from the latest turn."""
+
+    def __init__(self) -> None:
+        self.logger = get_logger("app.services.chat_memory_updates")
 
     def extract(
         self,
@@ -23,9 +28,30 @@ class ChatMemoryUpdater:
                 llm_items = []
 
             if llm_items:
+                log_pipeline_event(
+                    self.logger,
+                    "memory_updates_extracted_with_model",
+                    {
+                        "analysisId": chat_input.analysis_id,
+                        "updateCount": len(llm_items),
+                        "updateKinds": [item.kind for item in llm_items],
+                    },
+                )
                 return llm_items
 
-        return self._fallback_extract(chat_input, answer)
+        fallback_items = self._fallback_extract(chat_input, answer)
+        log_pipeline_event(
+            self.logger,
+            "memory_updates_extracted_with_fallback",
+            {
+                "analysisId": chat_input.analysis_id,
+                "userMessage": preview_text(chat_input.message),
+                "answer": preview_text(answer, 320),
+                "updateCount": len(fallback_items),
+                "updateKinds": [item.kind for item in fallback_items],
+            },
+        )
+        return fallback_items
 
     def _fallback_extract(
         self,

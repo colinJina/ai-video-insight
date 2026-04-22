@@ -1,8 +1,13 @@
 from app.models.chat import ChatContext, ChatMemoryItem, ChatMessage, SanitizedChatInput
+from app.core.logging import get_logger
+from app.core.pipeline_debug import log_pipeline_event, preview_text
 
 
 class ChatContextBuilder:
     """Builds the internal context object that downstream components consume."""
+
+    def __init__(self) -> None:
+        self.logger = get_logger("app.services.chat_context")
 
     def build(
         self,
@@ -26,6 +31,18 @@ class ChatContextBuilder:
             key_points=chat_input.key_points,
             memory_items=memory_items,
             conversation_summary=summary_text,
+        )
+
+        log_pipeline_event(
+            self.logger,
+            "context_sections_assembled",
+            {
+                "analysisId": chat_input.analysis_id,
+                "retainedRecentMessages": len(retained_recent_messages),
+                "memoryItemCount": len(memory_items),
+                "summaryPreview": preview_text(summary_text),
+                "assembledContext": preview_text(assembled_context, 480),
+            },
         )
 
         return ChatContext(

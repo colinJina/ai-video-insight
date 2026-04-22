@@ -2,6 +2,7 @@ import {
   ExternalServiceError,
   getPublicErrorMessage,
 } from "@/lib/analysis/errors";
+import { logPipelineEvent, previewText } from "@/lib/analysis/debug";
 import { getAnalysisCheckpointRepository } from "@/lib/analysis/checkpoint-repository";
 import { getAnalysisJobRepository } from "@/lib/analysis/job-repository";
 import { getAnalysisMemoryStoreRepository } from "@/lib/analysis/memory-store-repository";
@@ -325,6 +326,14 @@ export async function processAnalysisTask({
       errorMessage: null,
     };
 
+  logPipelineEvent("next.processing", "analysis_processing_started", {
+    analysisId,
+    workerId: workerId ?? null,
+    attempt: job?.attemptCount ?? 1,
+    currentStatus: task.status,
+    title: task.video.title,
+  });
+
   task = await restoreTaskFromCompletedCheckpoints(task);
 
   const transcriptProvider = createTranscriptProvider();
@@ -347,6 +356,14 @@ export async function processAnalysisTask({
 
       const transcript = await transcriptProvider.getTranscript({
         video: task.video,
+      });
+
+      logPipelineEvent("next.processing", "transcript_resolved", {
+        analysisId: task.id,
+        transcriptSource: transcript.source,
+        language: transcript.language,
+        segmentCount: transcript.segments.length,
+        fullTextPreview: previewText(transcript.fullText, 320),
       });
 
       task =
@@ -399,6 +416,15 @@ export async function processAnalysisTask({
       const introMessage = createAssistantMessage(result.chatContext.intro);
       const chatMessages = [introMessage];
 
+      logPipelineEvent("next.processing", "analysis_summary_generated", {
+        analysisId: task.id,
+        summaryPreview: previewText(result.summary, 320),
+        keyPointCount: result.keyPoints.length,
+        outlineCount: result.outline.length,
+        suggestedQuestionCount: result.suggestedQuestions.length,
+        persistedMemoryCount: persistedState.memoryItems.length,
+      });
+
       task =
         (await repository.update(task.id, {
           status: "processing",
@@ -434,10 +460,17 @@ export async function processAnalysisTask({
     });
 
     try {
+      const chunkCount = chunkTranscriptSegments(task.transcript!.segments).length;
       await indexTranscriptChunks({
         analysisId: task.id,
         userId: task.userId,
         transcript: task.transcript!.segments,
+      });
+
+      logPipelineEvent("next.processing", "transcript_chunks_indexed", {
+        analysisId: task.id,
+        chunkCount,
+        embeddingConfigured: createEmbeddingProvider().isConfigured(),
       });
 
       await recordCheckpoint({
@@ -446,7 +479,7 @@ export async function processAnalysisTask({
         stage: "indexing",
         status: "completed",
         payload: {
-          chunkCount: chunkTranscriptSegments(task.transcript!.segments).length,
+          chunkCount,
         },
       });
     } catch (error) {
@@ -469,6 +502,13 @@ export async function processAnalysisTask({
     await repository.update(task.id, {
       status: "completed",
       errorMessage: null,
+    });
+
+    logPipelineEvent("next.processing", "analysis_processing_completed", {
+      analysisId: task.id,
+      status: "completed",
+      transcriptSource: task.transcriptSource,
+      chatMessageCount: task.chatMessages.length,
     });
 
     if (job && workerId) {
@@ -498,6 +538,13 @@ export async function processAnalysisTask({
         transcriptSource,
       });
     }
+
+    logPipelineEvent("next.processing", "analysis_processing_failed", {
+      analysisId: task.id,
+      stage,
+      transcriptSource: transcriptSource ?? null,
+      message: getPublicErrorMessage(error),
+    });
 
     await finalizeFailure({
       task,
