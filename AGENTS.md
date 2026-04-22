@@ -60,6 +60,26 @@ Read these files before making architecture claims or changing the core flow:
 - `python-backend/app/services/chat_langgraph_adapter.py`
 - `supabase/schema.sql`
 
+## Learning-State Adaptation
+
+When the user asks:
+- what to learn for a feature
+- how a current flow works
+- which parts require implementation practice
+- how to explain a feature in interviews
+
+you must first read:
+
+- `docs/user-learning-state.md`
+
+Then adapt the answer to the latest documented learning state.
+
+Rules:
+- Prefer the latest learning-state document over older assumptions.
+- Do not repeat outdated statements about what the user already knows.
+- If the user has progressed on a topic, reduce beginner explanation and increase implementation detail, trade-offs, and interview follow-up depth.
+- If the learning-state file is missing, state that the skill-level assumptions are inferred rather than confirmed.
+
 ## Repo Map
 
 - `app/`
