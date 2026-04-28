@@ -13,7 +13,9 @@
     "typecheck": "next typegen && tsc --noEmit",
     "check:python": "node scripts/run-python-checks.mjs",
     "eval:retrieval": "node scripts/retrieval-eval.mjs",
-    "mcp:server": "node mcp-server/index.mjs"
+    "eval:answer": "node scripts/answer-eval.mjs",
+    "mcp:server": "node mcp-server/index.mjs",
+    "mcp:http": "node mcp-server/index.mjs --http"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.3",

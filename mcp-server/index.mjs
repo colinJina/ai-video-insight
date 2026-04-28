@@ -4,6 +4,10 @@ import crypto from "node:crypto";
 
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createClient } from "@supabase/supabase-js";
 import * as z from "zod/v4";
 
@@ -12,6 +16,8 @@ const SERVER_VERSION = "0.1.0";
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 20;
 const CONVERSATION_SUMMARY_KEY = "conversation_summary";
+const DEFAULT_HTTP_HOST = "127.0.0.1";
+const DEFAULT_HTTP_PORT = 3333;
 
 let supabaseClient = null;
 
@@ -55,9 +61,72 @@ function defaultUserId() {
   return readEnv("MCP_DEFAULT_USER_ID") || null;
 }
 
+function decodeJwtPayload(token) {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return {};
+  }
+
+  try {
+    const normalized = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function verifySupabaseAccessToken(token) {
+  const { data, error } = await getSupabase().auth.getUser(token);
+  if (error || !data?.user) {
+    throw new Error("Invalid Supabase access token.");
+  }
+
+  const claims = decodeJwtPayload(token);
+  return {
+    token,
+    clientId: data.user.id,
+    scopes: ["mcp:read", "mcp:write"],
+    expiresAt: typeof claims.exp === "number" ? claims.exp : undefined,
+    extra: {
+      userId: data.user.id,
+      email: data.user.email ?? null,
+      role: claims.role ?? null,
+    },
+  };
+}
+
+function userIdFromAuthInfo(authInfo) {
+  const userId = authInfo?.extra?.userId;
+  return typeof userId === "string" && userId ? userId : null;
+}
+
+function scopedUserId(extra, requestedUserId = null) {
+  const authenticatedUserId = userIdFromAuthInfo(extra?.authInfo);
+  if (authenticatedUserId) {
+    if (requestedUserId && requestedUserId !== authenticatedUserId) {
+      throw new Error("Authenticated MCP user cannot access another user's data.");
+    }
+
+    return authenticatedUserId;
+  }
+
+  return requestedUserId || defaultUserId();
+}
+
+function requireScopedUserId(extra, requestedUserId = null) {
+  const userId = scopedUserId(extra, requestedUserId);
+  if (!userId) {
+    throw new Error(
+      "Missing MCP user scope. Use Bearer auth for Streamable HTTP or set MCP_DEFAULT_USER_ID for local stdio.",
+    );
+  }
+
+  return userId;
+}
+
 function filterByUser(builder, userId) {
-  const scopedUserId = userId || defaultUserId();
-  return scopedUserId ? builder.eq("user_id", scopedUserId) : builder;
+  return builder.eq("user_id", userId);
 }
 
 function jsonText(value) {
@@ -215,6 +284,10 @@ function mapChunk(row, score = null) {
 }
 
 async function fetchAnalysis(analysisId, userId = null) {
+  if (!userId) {
+    throw new Error("fetchAnalysis requires a scoped user id.");
+  }
+
   let builder = getSupabase()
     .from("analysis_records")
     .select("*")
@@ -234,6 +307,10 @@ async function fetchAnalysis(analysisId, userId = null) {
 }
 
 async function listAnalysisRows({ userId = null, query = "", includeArchived = false, limit = DEFAULT_LIMIT } = {}) {
+  if (!userId) {
+    throw new Error("listAnalysisRows requires a scoped user id.");
+  }
+
   let builder = getSupabase()
     .from("analysis_records")
     .select("id,user_id,status,video,result,transcript_source,archived_at,created_at,updated_at")
@@ -264,8 +341,12 @@ async function listAnalysisRows({ userId = null, query = "", includeArchived = f
   return data ?? [];
 }
 
-async function listRecentResources(kind) {
-  const rows = await listAnalysisRows({ limit: 10, includeArchived: false });
+async function listRecentResources(kind, extra) {
+  const rows = await listAnalysisRows({
+    userId: requireScopedUserId(extra),
+    limit: 10,
+    includeArchived: false,
+  });
   return {
     resources: rows.map((row) => {
       const title = row.result?.title ?? row.video?.title ?? "Untitled analysis";
@@ -281,6 +362,10 @@ async function listRecentResources(kind) {
 }
 
 async function fetchMemoryRows(analysisId, userId = null) {
+  if (!userId) {
+    throw new Error("fetchMemoryRows requires a scoped user id.");
+  }
+
   let builder = getSupabase()
     .from("memory_store")
     .select("*")
@@ -323,7 +408,11 @@ async function searchTranscriptRows({
   startSeconds = null,
   endSeconds = null,
 }) {
-  const scopedUserId = userId || defaultUserId();
+  if (!userId) {
+    throw new Error("searchTranscriptRows requires a scoped user id.");
+  }
+
+  const scopedUserId = userId;
   const finalLimit = clampLimit(limit);
 
   if (scopedUserId) {
@@ -410,20 +499,20 @@ function registerResources(server) {
     server.registerResource(
       name,
       new ResourceTemplate(`analysis://{analysisId}/${kind}`, {
-        list: () => listRecentResources(kind),
+        list: (extra) => listRecentResources(kind, extra),
       }),
       {
         title: `Analysis ${kind}`,
         description,
         mimeType: "application/json",
       },
-      async (uri, variables) => {
+      async (uri, variables, extra) => {
         const analysisId = String(variables.analysisId ?? "");
         if (!analysisId) {
           throw new Error("Missing analysisId in resource URI.");
         }
 
-        return resourceText(uri, await builder(analysisId));
+        return resourceText(uri, await builder(analysisId, requireScopedUserId(extra)));
       },
     );
   };
@@ -432,8 +521,8 @@ function registerResources(server) {
     "analysis-summary",
     "summary",
     "Summary, key points, outline, and basic video metadata for one analysis.",
-    async (analysisId) => {
-      const row = await fetchAnalysis(analysisId);
+    async (analysisId, userId) => {
+      const row = await fetchAnalysis(analysisId, userId);
       return buildAnalysisContext(row, { includeTranscript: false, includeChat: false });
     },
   );
@@ -442,8 +531,8 @@ function registerResources(server) {
     "analysis-outline",
     "outline",
     "Timestamped outline for one analysis.",
-    async (analysisId) => {
-      const row = await fetchAnalysis(analysisId);
+    async (analysisId, userId) => {
+      const row = await fetchAnalysis(analysisId, userId);
       return {
         analysis: mapAnalysisSummary(row),
         outline: Array.isArray(row.result?.outline) ? row.result.outline : [],
@@ -455,8 +544,8 @@ function registerResources(server) {
     "analysis-transcript",
     "transcript",
     "Transcript excerpt and transcript metadata for one analysis.",
-    async (analysisId) => {
-      const row = await fetchAnalysis(analysisId);
+    async (analysisId, userId) => {
+      const row = await fetchAnalysis(analysisId, userId);
       return buildAnalysisContext(row, { includeTranscript: true, includeChat: false }).transcript;
     },
   );
@@ -465,15 +554,15 @@ function registerResources(server) {
     "analysis-memory",
     "memory",
     "Persisted conversation summary and memory items for one analysis.",
-    async (analysisId) => mapMemoryRows(await fetchMemoryRows(analysisId)),
+    async (analysisId, userId) => mapMemoryRows(await fetchMemoryRows(analysisId, userId)),
   );
 
   registerAnalysisResource(
     "analysis-chat-history",
     "chat-history",
     "Recent chat messages for one analysis.",
-    async (analysisId) => {
-      const row = await fetchAnalysis(analysisId);
+    async (analysisId, userId) => {
+      const row = await fetchAnalysis(analysisId, userId);
       return {
         analysis: mapAnalysisSummary(row),
         chatHistory: (row.chat_messages ?? []).map((message) => ({
@@ -493,14 +582,19 @@ function registerTools(server) {
       title: "List Analyses",
       description: "List recent video analysis workspaces available to the MCP server.",
       inputSchema: {
-        userId: z.string().uuid().optional().describe("Optional Supabase user id. Defaults to MCP_DEFAULT_USER_ID when set."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
         query: z.string().optional().describe("Optional text filter over title, URL, and summary."),
         includeArchived: z.boolean().default(false),
         limit: z.number().int().positive().max(MAX_LIMIT).default(DEFAULT_LIMIT),
       },
     },
-    async ({ userId, query = "", includeArchived = false, limit = DEFAULT_LIMIT }) => {
-      const rows = await listAnalysisRows({ userId, query, includeArchived, limit });
+    async ({ userId, query = "", includeArchived = false, limit = DEFAULT_LIMIT }, extra) => {
+      const rows = await listAnalysisRows({
+        userId: requireScopedUserId(extra, userId),
+        query,
+        includeArchived,
+        limit,
+      });
       return textContent({
         analyses: rows.map(mapAnalysisSummary),
       });
@@ -514,13 +608,13 @@ function registerTools(server) {
       description: "Fetch the reusable context for one video analysis, including summary, outline, and recent chat history.",
       inputSchema: {
         analysisId: z.string().uuid(),
-        userId: z.string().uuid().optional().describe("Optional Supabase user id. Defaults to MCP_DEFAULT_USER_ID when set."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
         includeTranscript: z.boolean().default(false),
         includeChat: z.boolean().default(true),
       },
     },
-    async ({ analysisId, userId, includeTranscript = false, includeChat = true }) => {
-      const row = await fetchAnalysis(analysisId, userId);
+    async ({ analysisId, userId, includeTranscript = false, includeChat = true }, extra) => {
+      const row = await fetchAnalysis(analysisId, requireScopedUserId(extra, userId));
       return textContent(buildAnalysisContext(row, { includeTranscript, includeChat }));
     },
   );
@@ -532,17 +626,17 @@ function registerTools(server) {
       description: "Search transcript chunks for evidence snippets inside one analysis.",
       inputSchema: {
         analysisId: z.string().uuid(),
-        userId: z.string().uuid().optional().describe("Optional Supabase user id. Defaults to MCP_DEFAULT_USER_ID when set."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
         query: z.string().min(1),
         limit: z.number().int().positive().max(MAX_LIMIT).default(DEFAULT_LIMIT),
         startSeconds: z.number().nonnegative().optional(),
         endSeconds: z.number().nonnegative().optional(),
       },
     },
-    async ({ analysisId, userId, query, limit = DEFAULT_LIMIT, startSeconds, endSeconds }) => {
+    async ({ analysisId, userId, query, limit = DEFAULT_LIMIT, startSeconds, endSeconds }, extra) => {
       const matches = await searchTranscriptRows({
         analysisId,
-        userId,
+        userId: requireScopedUserId(extra, userId),
         query,
         limit,
         startSeconds: startSeconds ?? null,
@@ -563,11 +657,11 @@ function registerTools(server) {
       description: "Read persisted memory and rolling conversation summary for one analysis.",
       inputSchema: {
         analysisId: z.string().uuid(),
-        userId: z.string().uuid().optional().describe("Optional Supabase user id. Defaults to MCP_DEFAULT_USER_ID when set."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
       },
     },
-    async ({ analysisId, userId }) => {
-      return textContent(mapMemoryRows(await fetchMemoryRows(analysisId, userId)));
+    async ({ analysisId, userId }, extra) => {
+      return textContent(mapMemoryRows(await fetchMemoryRows(analysisId, requireScopedUserId(extra, userId))));
     },
   );
 
@@ -578,14 +672,15 @@ function registerTools(server) {
       description: "Save a bounded manual memory note for one analysis. This is the only write tool in the MVP server.",
       inputSchema: {
         analysisId: z.string().uuid(),
-        userId: z.string().uuid().describe("Supabase user id that owns the analysis."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
         content: z.string().min(1).max(500),
         source: z.string().max(120).default("mcp.manual_note"),
         importance: z.number().min(0).max(1).default(0.5),
       },
     },
-    async ({ analysisId, userId, content, source = "mcp.manual_note", importance = 0.5 }) => {
-      await fetchAnalysis(analysisId, userId);
+    async ({ analysisId, userId, content, source = "mcp.manual_note", importance = 0.5 }, extra) => {
+      const scopedUser = requireScopedUserId(extra, userId);
+      await fetchAnalysis(analysisId, scopedUser);
       const normalizedContent = normalizeWhitespace(content);
       const memoryKey = createMemoryKey("manual_note", normalizedContent);
       const { error } = await getSupabase()
@@ -593,7 +688,7 @@ function registerTools(server) {
         .upsert(
           {
             analysis_id: analysisId,
-            user_id: userId,
+            user_id: scopedUser,
             memory_key: memoryKey,
             kind: "manual_note",
             content: normalizedContent,
@@ -629,12 +724,12 @@ function registerTools(server) {
       description: "Build a PDF/report-ready JSON payload from one analysis without generating a binary PDF.",
       inputSchema: {
         analysisId: z.string().uuid(),
-        userId: z.string().uuid().optional().describe("Optional Supabase user id. Defaults to MCP_DEFAULT_USER_ID when set."),
+        userId: z.string().uuid().optional().describe("Local stdio fallback only. Streamable HTTP derives the user from Bearer auth."),
         includeChatHistory: z.boolean().default(true),
       },
     },
-    async ({ analysisId, userId, includeChatHistory = true }) => {
-      const row = await fetchAnalysis(analysisId, userId);
+    async ({ analysisId, userId, includeChatHistory = true }, extra) => {
+      const row = await fetchAnalysis(analysisId, requireScopedUserId(extra, userId));
       return textContent({
         title: row.result?.title ?? row.video?.title ?? "Untitled analysis",
         summary: row.result?.summary ?? "",
@@ -729,7 +824,7 @@ function registerPrompts(server) {
   );
 }
 
-async function main() {
+function createAiVideoInsightMcpServer() {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
@@ -739,9 +834,226 @@ async function main() {
   registerTools(server);
   registerPrompts(server);
 
+  return server;
+}
+
+async function runStdioServer() {
+  const server = createAiVideoInsightMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[mcp] ${SERVER_NAME} ${SERVER_VERSION} is running over stdio.`);
+}
+
+function readPort() {
+  const value = Number(readEnv("MCP_HTTP_PORT") || readEnv("PORT") || DEFAULT_HTTP_PORT);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_HTTP_PORT;
+}
+
+function readHost() {
+  return readEnv("MCP_HTTP_HOST") || DEFAULT_HTTP_HOST;
+}
+
+function readAllowedHosts() {
+  const value = readEnv("MCP_ALLOWED_HOSTS");
+  return value ? value.split(",").map((host) => host.trim()).filter(Boolean) : undefined;
+}
+
+function isHttpAuthDisabled() {
+  return ["1", "true", "yes"].includes(readEnv("MCP_HTTP_AUTH_DISABLED").toLowerCase());
+}
+
+function assertSameSessionUser(session, authInfo) {
+  const authUserId = userIdFromAuthInfo(authInfo);
+  if (!authUserId || session.userId !== authUserId) {
+    throw new Error("MCP session does not belong to the authenticated user.");
+  }
+}
+
+function headerString(value) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return typeof value === "string" && value ? value : null;
+}
+
+function buildAuthMiddleware(mcpUrl) {
+  return requireBearerAuth({
+    verifier: {
+      verifyAccessToken: verifySupabaseAccessToken,
+    },
+    requiredScopes: [],
+    resourceMetadataUrl: mcpUrl.toString(),
+  });
+}
+
+async function runStreamableHttpServer() {
+  const host = readHost();
+  const port = readPort();
+  const authDisabled = isHttpAuthDisabled();
+  const mcpUrl = new URL(`http://${host}:${port}/mcp`);
+  const app = createMcpExpressApp({
+    host,
+    allowedHosts: readAllowedHosts(),
+  });
+  const authMiddleware = authDisabled ? null : buildAuthMiddleware(mcpUrl);
+  const sessions = new Map();
+
+  app.get("/health", (_req, res) => {
+    res.json({
+      ok: true,
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
+      transport: "streamable-http",
+      auth: authDisabled ? "disabled" : "supabase-bearer",
+      activeSessions: sessions.size,
+    });
+  });
+
+  const mcpPostHandler = async (req, res) => {
+    try {
+      const sessionId = headerString(req.headers["mcp-session-id"]);
+      if (sessionId) {
+        const session = sessions.get(sessionId);
+        if (!session) {
+          res.status(404).json({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "MCP session not found." },
+            id: null,
+          });
+          return;
+        }
+
+        if (!authDisabled) {
+          assertSameSessionUser(session, req.auth);
+        }
+
+        await session.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      if (!isInitializeRequest(req.body)) {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Bad Request: initialize is required before session requests." },
+          id: null,
+        });
+        return;
+      }
+
+      const userId = authDisabled ? defaultUserId() || "anonymous" : userIdFromAuthInfo(req.auth);
+      if (!userId) {
+        res.status(401).json({
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Missing authenticated Supabase user." },
+          id: null,
+        });
+        return;
+      }
+
+      let transport;
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        onsessioninitialized: (initializedSessionId) => {
+          sessions.set(initializedSessionId, {
+            transport,
+            server,
+            userId,
+          });
+        },
+      });
+
+      const server = createAiVideoInsightMcpServer();
+      transport.onclose = async () => {
+        const initializedSessionId = transport.sessionId;
+        if (initializedSessionId) {
+          sessions.delete(initializedSessionId);
+        }
+        await server.close().catch(() => undefined);
+      };
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("[mcp] Streamable HTTP POST failed:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: { code: -32603, message: "Internal server error." },
+          id: null,
+        });
+      }
+    }
+  };
+
+  const mcpSessionHandler = async (req, res) => {
+    try {
+      const sessionId = headerString(req.headers["mcp-session-id"]);
+      const session = sessionId ? sessions.get(sessionId) : null;
+      if (!session) {
+        res.status(400).send("Invalid or missing MCP session id.");
+        return;
+      }
+
+      if (!authDisabled) {
+        assertSameSessionUser(session, req.auth);
+      }
+
+      await session.transport.handleRequest(req, res);
+    } catch (error) {
+      console.error(`[mcp] Streamable HTTP ${req.method} failed:`, error);
+      if (!res.headersSent) {
+        res.status(500).send("Internal server error.");
+      }
+    }
+  };
+
+  if (authMiddleware) {
+    app.post("/mcp", authMiddleware, mcpPostHandler);
+    app.get("/mcp", authMiddleware, mcpSessionHandler);
+    app.delete("/mcp", authMiddleware, mcpSessionHandler);
+  } else {
+    app.post("/mcp", mcpPostHandler);
+    app.get("/mcp", mcpSessionHandler);
+    app.delete("/mcp", mcpSessionHandler);
+  }
+
+  const httpServer = app.listen(port, host, () => {
+    console.error(
+      `[mcp] ${SERVER_NAME} ${SERVER_VERSION} is running over Streamable HTTP at http://${host}:${port}/mcp.`,
+    );
+    if (authDisabled) {
+      console.error("[mcp] WARNING: MCP_HTTP_AUTH_DISABLED is enabled. Do not use this mode for deployment.");
+    }
+  });
+
+  httpServer.on("error", (error) => {
+    console.error("[mcp] Failed to start Streamable HTTP server:", error);
+    process.exit(1);
+  });
+
+  const shutdown = async () => {
+    console.error("[mcp] Shutting down Streamable HTTP server...");
+    for (const [sessionId, session] of sessions) {
+      await session.transport.close().catch(() => undefined);
+      await session.server.close().catch(() => undefined);
+      sessions.delete(sessionId);
+    }
+    httpServer.close(() => process.exit(0));
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+async function main() {
+  const transport = readEnv("MCP_TRANSPORT").toLowerCase();
+  if (transport === "http" || transport === "streamable-http" || process.argv.includes("--http")) {
+    await runStreamableHttpServer();
+    return;
+  }
+
+  await runStdioServer();
 }
 
 main().catch((error) => {

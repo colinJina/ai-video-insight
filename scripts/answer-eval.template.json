@@ -1,0 +1,47 @@
+{
+  "analysisId": "replace-with-analysis-id",
+  "userId": "replace-with-user-id",
+  "topK": [1, 3, 5],
+  "denseLimit": 12,
+  "sparseLimit": 10,
+  "finalLimit": 5,
+  "cost": {
+    "inputPer1KTokens": 0.001,
+    "outputPer1KTokens": 0.002
+  },
+  "queries": [
+    {
+      "id": "grounded-answer",
+      "query": "What is the main idea explained in this video?",
+      "expectedChunkIndexes": [0, 1],
+      "allowedCitationChunkIndexes": [2],
+      "expectedAnswerContains": ["replace-with-important-answer-phrase"],
+      "forbiddenAnswerContains": ["replace-with-unsupported-claim"],
+      "expectedRefusal": false,
+      "notes": "Use this for a normal question whose answer should be supported by transcript evidence."
+    },
+    {
+      "id": "citation-window",
+      "query": "What does the opening section say?",
+      "expectedChunkIndexes": [0],
+      "metadataFilter": {
+        "startSeconds": 0,
+        "endSeconds": 90,
+        "label": "opening_section"
+      },
+      "expectedAnswerContains": ["replace-with-opening-detail"],
+      "forbiddenAnswerContains": [],
+      "expectedRefusal": false,
+      "notes": "Use metadataFilter when the question should retrieve a specific time window."
+    },
+    {
+      "id": "unsupported-question-refusal",
+      "query": "What exact salary does the speaker earn?",
+      "expectedChunkIndexes": [],
+      "expectedAnswerContains": [],
+      "forbiddenAnswerContains": ["$100000", "six figures", "exact salary"],
+      "expectedRefusal": true,
+      "notes": "Use this to test whether the assistant refuses or qualifies unsupported questions."
+    }
+  ]
+}
