@@ -1,6 +1,6 @@
 {
   "name": "ai-video-insight",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "postinstall": "node scripts/install-yt-dlp.mjs",
