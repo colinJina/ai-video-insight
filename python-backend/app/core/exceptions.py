@@ -1,7 +1,7 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from logging import Logger
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -92,8 +92,11 @@ def install_exception_handlers(app: FastAPI, logger: Logger) -> None:
 
 def create_request_logging_middleware(
     logger: Logger,
-) -> Callable[[Request, Callable], JSONResponse]:
-    async def log_requests(request: Request, call_next: Callable) -> JSONResponse:
+) -> Callable[[Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]]:
+    async def log_requests(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         logger.info("Incoming request %s %s", request.method, request.url.path)
         response = await call_next(request)
         logger.info(

@@ -60,11 +60,11 @@ class ChatOpenAIConstructor(Protocol):
         self,
         *,
         model: str,
-        temperature: float | None = ...,
-        timeout: float | None = ...,
-        max_retries: int | None = ...,
-        api_key: SecretStr | None = ...,
-        base_url: str | None = ...,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+        api_key: SecretStr | None = None,
+        base_url: str | None = None,
     ) -> Any: ...
 
 

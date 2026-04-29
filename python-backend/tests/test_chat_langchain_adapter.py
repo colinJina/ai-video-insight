@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 
@@ -77,7 +78,7 @@ def test_invoke_text_builds_langchain_messages_and_json_mode(monkeypatch):
         content = "test-ok"
 
     class FakeChatOpenAI:
-        last_instance = None
+        last_instance: ClassVar["FakeChatOpenAI | None"] = None
 
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -105,6 +106,7 @@ def test_invoke_text_builds_langchain_messages_and_json_mode(monkeypatch):
     )
     instance = FakeChatOpenAI.last_instance
 
+    assert instance is not None
     assert result == "test-ok"
     assert instance.bound_kwargs == {"response_format": {"type": "json_object"}}
     assert instance.invoked_messages == [

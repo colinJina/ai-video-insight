@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
+    "typecheck:python": "pyright",
     "check:python": "node scripts/run-python-checks.mjs",
     "eval:retrieval": "node scripts/retrieval-eval.mjs",
     "eval:answer": "node scripts/answer-eval.mjs",
@@ -37,6 +38,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "lefthook": "^2.1.6",
+    "pyright": "^1.1.409",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

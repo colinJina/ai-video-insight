@@ -24,11 +24,19 @@ if (!existsSync(pythonExecutable)) {
 
 runPython(["-m", "compileall", "app", "tests"]);
 runPython(["-m", "pytest", "-q"]);
+runCommand(process.platform === "win32" ? "pyright.cmd" : "pyright", [], {
+  cwd: projectRoot,
+});
 
 function runPython(args) {
-  const result = spawnSync(pythonExecutable, args, {
-    cwd: pythonBackendDir,
+  runCommand(pythonExecutable, args, { cwd: pythonBackendDir });
+}
+
+function runCommand(command, args, options) {
+  const result = spawnSync(command, args, {
+    ...options,
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   if (result.status !== 0) {

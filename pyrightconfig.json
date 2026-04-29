@@ -1,0 +1,23 @@
+{
+  "include": ["python-backend/app", "python-backend/tests"],
+  "exclude": [
+    "**/__pycache__",
+    ".next",
+    ".venv",
+    "node_modules",
+    "pytest-cache-files-*",
+    "python-backend/.venv",
+    "python-backend/.tmp",
+    "python-backend/pytest-cache-files-*"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "python-backend",
+      "extraPaths": ["python-backend"]
+    }
+  ],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.13",
+  "venvPath": "python-backend",
+  "venv": ".venv"
+}
