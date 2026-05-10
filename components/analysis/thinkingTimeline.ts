@@ -11,6 +11,13 @@ export type ThinkingTimelineState = {
   phases: ThinkingTimelinePhase[];
 };
 
+export type ThinkingPhaseMotion = {
+  delayMs: number;
+  shouldPulse: boolean;
+  shouldSheen: boolean;
+  statusClassName: "is-active" | "is-complete" | "is-failed";
+};
+
 export function createThinkingTimelineState(): ThinkingTimelineState {
   return {
     phases: [],
@@ -53,5 +60,22 @@ export function buildThinkingSummary(phases: ThinkingTimelinePhase[]) {
     completedCount,
     totalCount: phases.length,
     hasFailure: Boolean(failedPhase),
+  };
+}
+
+export function describeThinkingPhaseMotion(
+  phase: ThinkingTimelinePhase,
+  index: number,
+): ThinkingPhaseMotion {
+  return {
+    delayMs: Math.min(index * 60, 240),
+    shouldPulse: phase.status === "active",
+    shouldSheen: phase.status === "active",
+    statusClassName:
+      phase.status === "failed"
+        ? "is-failed"
+        : phase.status === "completed"
+          ? "is-complete"
+          : "is-active",
   };
 }

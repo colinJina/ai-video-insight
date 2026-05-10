@@ -7,6 +7,7 @@ import {
   applyThinkingPhaseUpdate,
   buildThinkingSummary,
   createThinkingTimelineState,
+  describeThinkingPhaseMotion,
 } from "@/components/analysis/thinkingTimeline";
 import { readSseEvents } from "@/lib/analysis/sse";
 import type {
@@ -124,10 +125,10 @@ function ThinkingReplyPlaceholder({
   return (
     <div
       aria-live="polite"
-      className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
+      className="thinking-panel rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
     >
       <button
-        className="flex w-full items-start justify-between gap-4 text-left"
+        className="thinking-summary-toggle progress-sheen flex w-full items-start justify-between gap-4 text-left"
         onClick={onToggle}
         type="button"
       >
@@ -153,17 +154,27 @@ function ThinkingReplyPlaceholder({
             </p>
           </div>
         </div>
-        <span className="font-headline text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.62)]">
-          {isExpanded ? "Hide Steps" : "Show Steps"}
+        <span className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.62)]">
+          <span>{isExpanded ? "Hide Steps" : "Show Steps"}</span>
+          <span
+            aria-hidden="true"
+            className={`thinking-chevron material-symbols-outlined ${isExpanded ? "is-expanded" : ""}`}
+          >
+            expand_more
+          </span>
         </span>
       </button>
       {isExpanded ? (
-        <div className="mt-4 space-y-3 border-t border-[color:rgba(88,66,53,0.16)] pt-4">
-          {phases.map((phase) => (
-            <div
-              key={phase.id}
-              className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(29,17,6,0.42)] px-3 py-3"
-            >
+        <div className="thinking-phase-list mt-4 space-y-3 border-t border-[color:rgba(88,66,53,0.16)] pt-4">
+          {phases.map((phase, index) => {
+            const motion = describeThinkingPhaseMotion(phase, index);
+
+            return (
+              <div
+                key={phase.id}
+                className={`thinking-phase-card rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(29,17,6,0.42)] px-4 py-3.5 pl-8 ${motion.statusClassName} ${motion.shouldPulse ? "thinking-phase-pulse" : ""} ${motion.shouldSheen ? "progress-sheen" : ""}`}
+                style={{ animationDelay: `${motion.delayMs}ms` }}
+              >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-primary/25 bg-[color:rgba(255,127,0,0.08)] px-2.5 py-1 font-headline text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
                   {phase.status}
@@ -182,13 +193,15 @@ function ThinkingReplyPlaceholder({
                   {phase.detail}
                 </p>
               ) : null}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ) : null}
       {children ? (
-        <div className="mt-4 border-t border-[color:rgba(88,66,53,0.16)] pt-4 text-sm leading-7 text-[color:var(--text-muted)]">
-          {children}
+        <div className="typewriter-shell mt-4 border-t border-[color:rgba(88,66,53,0.16)] pt-4 text-sm leading-7 text-[color:var(--text-muted)]">
+          <span>{children}</span>
+          <span aria-hidden="true" className="typewriter-cursor ml-1 inline-block" />
         </div>
       ) : null}
     </div>

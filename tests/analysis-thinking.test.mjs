@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   applyThinkingPhaseUpdate,
   buildThinkingSummary,
+  describeThinkingPhaseMotion,
   createThinkingTimelineState,
 } from "../components/analysis/thinkingTimeline.ts";
 
@@ -64,4 +65,23 @@ test("buildThinkingSummary prefers the active phase detail and reports completio
   assert.match(summary.detail, /Drafting the reply/);
   assert.equal(summary.completedCount, 1);
   assert.equal(summary.totalCount, 2);
+});
+
+test("describeThinkingPhaseMotion flags active phases for pulse motion and staggered entry", () => {
+  const motion = describeThinkingPhaseMotion(
+    {
+      id: "python-generate-answer",
+      label: "Generating answer",
+      status: "active",
+      detail: "Drafting the reply from the assembled context.",
+      source: "python",
+      toolName: null,
+    },
+    2,
+  );
+
+  assert.equal(motion.delayMs, 120);
+  assert.equal(motion.shouldPulse, true);
+  assert.equal(motion.shouldSheen, true);
+  assert.equal(motion.statusClassName, "is-active");
 });
