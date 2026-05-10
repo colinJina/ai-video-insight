@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from app.core.logging import get_logger
 from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.models.chat import (
     ChatContext,
     ChatMemoryItem,
+    ChatPhase,
     ChatRequest,
     ChatResponse,
     SanitizedChatInput,
@@ -68,7 +70,13 @@ class ChatService:
         )
 
     def stream_respond(self, request: ChatRequest):
-        prepared_turn = self._prepare_turn(request)
+        prepared_turn = yield from self._prepare_turn_stream(request)
+        yield self._build_phase_event(
+            id="python-generate-answer",
+            label="Generating answer",
+            status="active",
+            detail="Drafting the reply from the assembled transcript, summary, and memory context.",
+        )
         model_chunks = self.model_gateway.generate_stream(prepared_turn.context)
         log_pipeline_event(
             self.logger,
@@ -87,6 +95,15 @@ class ChatService:
             answer_parts: list[str] = []
 
             for chunk in model_chunks:
+                if isinstance(chunk, dict) and chunk.get("type") == "phase":
+                    phase = chunk.get("phase")
+                    if isinstance(phase, dict):
+                        yield {
+                            "event": "phase",
+                            "data": phase,
+                        }
+                    continue
+
                 normalized_chunk = chunk if isinstance(chunk, str) else str(chunk)
                 if not normalized_chunk:
                     continue
@@ -108,6 +125,18 @@ class ChatService:
                     "data": chunk,
                 }
 
+        yield self._build_phase_event(
+            id="python-generate-answer",
+            label="Generating answer",
+            status="completed",
+            detail="Finished drafting the streamed answer text.",
+        )
+        yield self._build_phase_event(
+            id="python-finalize-response",
+            label="Finalizing memory and summary",
+            status="active",
+            detail="Updating rolling conversation memory and final response metadata.",
+        )
         final_response = self._build_final_response(
             prepared_turn,
             answer,
@@ -123,6 +152,12 @@ class ChatService:
                     final_response.conversation_summary
                 ),
             },
+        )
+        yield self._build_phase_event(
+            id="python-finalize-response",
+            label="Finalizing memory and summary",
+            status="completed",
+            detail="Updated the rolling summary and packaged the final chat response.",
         )
         yield {
             "event": "final",
@@ -204,6 +239,138 @@ class ChatService:
             conversation_summary=conversation_summary,
         )
 
+    def _prepare_turn_stream(self, request: ChatRequest):
+        yield self._build_phase_event(
+            id="python-sanitize-input",
+            label="Sanitizing chat input",
+            status="active",
+            detail="Validating the latest user message and trimming the request payload.",
+        )
+        chat_input = self.sanitizer.sanitize(request)
+        logPipeline = log_pipeline_event
+        logPipeline(
+            self.logger,
+            "chat_input_sanitized",
+            {
+                "analysisId": chat_input.analysis_id,
+                "userId": chat_input.user_id,
+                "message": preview_text(chat_input.message),
+                "recentMessageCount": len(chat_input.recent_messages),
+                "storedConversationSummary": preview_text(
+                    chat_input.stored_conversation_summary
+                ),
+            },
+        )
+        yield self._build_phase_event(
+            id="python-sanitize-input",
+            label="Sanitizing chat input",
+            status="completed",
+            detail="Validated the request payload and prepared the latest user turn.",
+        )
+        yield self._build_phase_event(
+            id="python-load-memory",
+            label="Loading memory",
+            status="active",
+            detail="Loading recalled memory items that may affect the answer.",
+        )
+        memory_items, memory_hits = self.load_memory(chat_input)
+        logPipeline(
+            self.logger,
+            "chat_memory_loaded",
+            {
+                "analysisId": chat_input.analysis_id,
+                "memoryItemCount": len(memory_items),
+                "memoryHits": memory_hits,
+                "memoryKinds": [item.kind for item in memory_items],
+            },
+        )
+        yield self._build_phase_event(
+            id="python-load-memory",
+            label="Loading memory",
+            status="completed",
+            detail=(
+                f"Loaded {len(memory_items)} memory item"
+                f"{'' if len(memory_items) == 1 else 's'} and "
+                f"{len(memory_hits)} memory hit"
+                f"{'' if len(memory_hits) == 1 else 's'}."
+            ),
+        )
+        yield self._build_phase_event(
+            id="python-compress-summary",
+            label="Compressing conversation summary",
+            status="active",
+            detail="Refreshing the rolling summary for recent conversation context.",
+        )
+        (
+            retained_recent_messages,
+            conversation_summary,
+            conversation_was_compressed,
+        ) = self.summarizer.summarize(chat_input, self.model_gateway)
+        logPipeline(
+            self.logger,
+            "conversation_summary_prepared",
+            {
+                "analysisId": chat_input.analysis_id,
+                "retainedRecentMessages": len(retained_recent_messages),
+                "conversationWasCompressed": conversation_was_compressed,
+                "conversationSummary": preview_text(conversation_summary, 320),
+            },
+        )
+        yield self._build_phase_event(
+            id="python-compress-summary",
+            label="Compressing conversation summary",
+            status="completed",
+            detail=(
+                "Prepared the rolling conversation summary."
+                if conversation_summary
+                else "No rolling summary changes were needed for this turn."
+            ),
+        )
+        yield self._build_phase_event(
+            id="python-build-context",
+            label="Building model context",
+            status="active",
+            detail="Assembling transcript evidence, outline, summary, and memory for the model.",
+        )
+        context = self.context_builder.build(
+            chat_input,
+            memory_items,
+            memory_hits,
+            retained_recent_messages,
+            conversation_summary,
+            conversation_was_compressed,
+        )
+        logPipeline(
+            self.logger,
+            "chat_context_built",
+            {
+                "analysisId": chat_input.analysis_id,
+                "assembledContext": preview_text(context.assembled_context, 480),
+                "transcriptExcerpt": preview_text(context.transcript_excerpt, 320),
+                "outlineCount": len(context.outline),
+                "keyPointCount": len(context.key_points),
+            },
+        )
+        yield self._build_phase_event(
+            id="python-build-context",
+            label="Building model context",
+            status="completed",
+            detail=(
+                f"Built context with {len(context.memory_items)} memory item"
+                f"{'' if len(context.memory_items) == 1 else 's'} and "
+                f"{len(context.key_points)} key point"
+                f"{'' if len(context.key_points) == 1 else 's'}."
+            ),
+        )
+
+        return PreparedChatTurn(
+            chat_input=chat_input,
+            memory_items=memory_items,
+            memory_hits=memory_hits,
+            context=context,
+            conversation_summary=conversation_summary,
+        )
+
     def _build_final_response(
         self,
         prepared_turn: PreparedChatTurn,
@@ -258,6 +425,29 @@ class ChatService:
             None,
         ).answer
 
+    def _build_phase_event(
+        self,
+        *,
+        id: str,
+        label: str,
+        status: Literal["active", "completed", "failed"],
+        detail: str | None,
+        tool_name: str | None = None,
+    ):
+        phase = ChatPhase(
+            id=id,
+            label=label,
+            status=status,
+            detail=detail,
+            source="python",
+            tool_name=tool_name,
+        )
+
+        return {
+            "event": "phase",
+            "data": phase.model_dump(by_alias=True),
+        }
+
     def _chunk_answer(self, answer: str) -> list[str]:
         normalized = answer.strip()
         if not normalized:
@@ -271,5 +461,6 @@ class ChatService:
             cursor += 24
 
         return chunks
+
 
 chat_service = ChatService()

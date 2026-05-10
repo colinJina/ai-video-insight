@@ -74,14 +74,10 @@ def test_generate_raises_when_graph_returns_empty_answer(monkeypatch):
     adapter = make_adapter()
     context = make_context()
 
-    class FakeGraph:
-        def invoke(self, _state, config=None):
-            return {"messages": [SimpleNamespace(content="", tool_calls=[])]}
-
     monkeypatch.setattr(
         adapter,
-        "_build_graph",
-        lambda **kwargs: (FakeGraph(), {"messages": []}),
+        "_run_agent",
+        lambda **kwargs: ("", []),
     )
 
     with pytest.raises(ServiceUnavailableError, match="empty final answer"):
@@ -111,6 +107,37 @@ def test_search_retrieved_chunks_tool_prefers_relevant_chunk():
     assert "Chunk 3" in result
     assert "00:18 - 00:26" in result
     assert "Chunking affects recall and precision" in result
+
+
+def test_generate_stream_includes_tool_phase_events_before_answer_chunks(monkeypatch):
+    adapter = make_adapter()
+    context = make_context()
+    tool_phase = {
+        "type": "phase",
+        "phase": {
+            "id": "python-tool-search-retrieved-chunks-0-1",
+            "label": "Inspecting transcript evidence",
+            "status": "completed",
+            "detail": "Checked the retrieved transcript chunks for grounded evidence.",
+            "source": "python",
+            "toolName": "Retrieved chunk search",
+        },
+    }
+
+    monkeypatch.setattr(
+        adapter,
+        "_run_agent",
+        lambda **kwargs: ("Final grounded answer", [tool_phase]),
+    )
+
+    stream_items = list(
+        adapter.generate_stream("system prompt", "user prompt", context) or []
+    )
+
+    assert stream_items[0] == tool_phase
+    assert "".join(item for item in stream_items[1:] if isinstance(item, str)) == (
+        "Final grounded answer"
+    )
 
 
 def test_extract_final_text_skips_tool_call_messages():

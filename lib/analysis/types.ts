@@ -191,6 +191,19 @@ export interface AnalysisChatCitation {
   endSeconds: number | null;
 }
 
+export type AnalysisChatPhaseStatus = "active" | "completed" | "failed";
+
+export type AnalysisChatPhaseSource = "next" | "python";
+
+export interface AnalysisChatPhase {
+  id: string;
+  label: string;
+  status: AnalysisChatPhaseStatus;
+  detail: string | null;
+  source: AnalysisChatPhaseSource;
+  toolName?: string | null;
+}
+
 export interface AnalysisChatRetrievalDebug {
   rewrittenQuery: string;
   denseCandidateCount: number;

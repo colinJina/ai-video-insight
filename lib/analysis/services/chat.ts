@@ -35,6 +35,7 @@ import { chunkTranscriptSegments } from "@/lib/analysis/transcript-chunking";
 import { getTranscriptChunkRepository } from "@/lib/analysis/transcript-chunk-repository";
 import type {
   AnalysisChatCitation,
+  AnalysisChatPhase,
   AnalysisChatState,
   AnalysisChatMessage,
   AnalysisChatContextPayload,
@@ -112,6 +113,32 @@ export type PreparedAnalysisChatTurn = {
   context: AnalysisChatContextBuildResult;
   pythonRequest: PythonChatRequest;
 };
+
+export type PreparedAnalysisChatTurnStreamEvent =
+  | {
+      type: "phase";
+      phase: AnalysisChatPhase;
+    }
+  | {
+      type: "prepared";
+      preparedTurn: PreparedAnalysisChatTurn;
+    };
+
+function createNextPhase(
+  id: string,
+  label: string,
+  status: AnalysisChatPhase["status"],
+  detail: string | null,
+): AnalysisChatPhase {
+  return {
+    id,
+    label,
+    status,
+    detail,
+    source: "next",
+    toolName: null,
+  };
+}
 
 function resolveTranscriptDurationSeconds(task: AnalysisTask) {
   const transcriptEnd =
@@ -646,11 +673,10 @@ async function retrieveTranscriptMatches(
 }
 
 async function buildAnalysisChatContext(
-  id: string,
   task: AnalysisTask,
   chatState: AnalysisChatState,
   recentMessages: AnalysisChatMessage[],
-  latestMessage: string,
+  retrieval: RetrievalSelection,
 ): Promise<AnalysisChatContextBuildResult> {
   if (!task.result || !task.transcript) {
     throw new ConflictError(
@@ -658,11 +684,6 @@ async function buildAnalysisChatContext(
     );
   }
 
-  const retrieval = await retrieveTranscriptMatches(
-    task,
-    recentMessages,
-    latestMessage,
-  );
   const storedMemoryItems = recallStoredMemoryItems(
     chatState,
     retrieval.debug.rewrittenQuery,
@@ -677,7 +698,7 @@ async function buildAnalysisChatContext(
   return {
     payload: {
       userId: task.userId,
-      analysisId: id,
+      analysisId: task.id,
       analysisSummary: task.result.summary,
       transcriptExcerpt,
       storedConversationSummary: chatState.conversationSummary,
@@ -751,10 +772,41 @@ export async function prepareAnalysisChatTurn(
   id: string,
   input: ChatInput,
 ): Promise<PreparedAnalysisChatTurn> {
+  let preparedTurn: PreparedAnalysisChatTurn | null = null;
+
+  for await (const event of prepareAnalysisChatTurnStream(id, input)) {
+    if (event.type === "prepared") {
+      preparedTurn = event.preparedTurn;
+    }
+  }
+
+  if (!preparedTurn) {
+    throw new ConflictError(
+      "The chat preparation stream ended before building the Python request.",
+    );
+  }
+
+  return preparedTurn;
+}
+
+export async function* prepareAnalysisChatTurnStream(
+  id: string,
+  input: ChatInput,
+): AsyncGenerator<PreparedAnalysisChatTurnStreamEvent> {
   const message = normalizeWhitespace(input.message ?? "");
   if (!message) {
     throw new ValidationError("Please enter a follow-up question.");
   }
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-load-analysis",
+      "Loading analysis state",
+      "active",
+      "Loading the completed analysis record.",
+    ),
+  };
 
   const repository = getAnalysisRepository();
   const task = await repository.findById(id);
@@ -767,14 +819,83 @@ export async function prepareAnalysisChatTurn(
     throw new ConflictError("Wait for the video analysis to complete before sending chat messages.");
   }
 
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-load-analysis",
+      "Loading analysis state",
+      "completed",
+      "Loaded the analysis and validated that chat can continue.",
+    ),
+  };
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-shape-retrieval",
+      "Recalling memory and shaping retrieval",
+      "active",
+      "Loading durable chat memory and shaping the retrieval query.",
+    ),
+  };
+
   const chatState = await resolveChatState(task);
   const userMessage = createUserMessage(trimText(message, 500));
+  const recentMessages = [...task.chatMessages, userMessage];
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-shape-retrieval",
+      "Recalling memory and shaping retrieval",
+      "completed",
+      `Loaded ${chatState.memoryItems.length} stored memory item${chatState.memoryItems.length === 1 ? "" : "s"} and prepared the retrieval query.`,
+    ),
+  };
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-retrieve-evidence",
+      "Retrieving transcript evidence",
+      "active",
+      "Searching transcript chunks for the most relevant evidence.",
+    ),
+  };
+
+  const retrieval = await retrieveTranscriptMatches(
+    task,
+    recentMessages,
+    userMessage.content,
+  );
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-retrieve-evidence",
+      "Retrieving transcript evidence",
+      "completed",
+      retrieval.matches.length > 0
+        ? `Selected ${retrieval.matches.length} transcript chunk${retrieval.matches.length === 1 ? "" : "s"} for grounding.`
+        : "No ranked transcript chunks were selected, so the fallback excerpt will be used.",
+    ),
+  };
+
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-assemble-context",
+      "Assembling chat context",
+      "active",
+      "Packaging transcript evidence, outline, summary, and memory for the Python backend.",
+    ),
+  };
+
   const context = await buildAnalysisChatContext(
-    id,
     task,
     chatState,
-    [...task.chatMessages, userMessage],
-    userMessage.content,
+    recentMessages,
+    retrieval,
   );
   const pythonRequest = buildPythonChatRequest(
     userMessage.content,
@@ -795,13 +916,26 @@ export async function prepareAnalysisChatTurn(
     storedMemoryKinds: context.payload.storedMemoryItems.map((item) => item.kind),
   });
 
-  return {
-    id,
-    task,
-    chatState,
-    userMessage,
-    context,
-    pythonRequest,
+  yield {
+    type: "phase",
+    phase: createNextPhase(
+      "next-assemble-context",
+      "Assembling chat context",
+      "completed",
+      `Assembled ${context.payload.memoryItems.length} request memory item${context.payload.memoryItems.length === 1 ? "" : "s"} and ${context.payload.storedMemoryItems.length} stored memory item${context.payload.storedMemoryItems.length === 1 ? "" : "s"}.`,
+    ),
+  };
+
+  yield {
+    type: "prepared",
+    preparedTurn: {
+      id,
+      task,
+      chatState,
+      userMessage,
+      context,
+      pythonRequest,
+    },
   };
 }
 

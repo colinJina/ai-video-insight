@@ -36,6 +36,15 @@ export interface PythonChatMemoryItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface PythonChatPhase {
+  id: string;
+  label: string;
+  status: "active" | "completed" | "failed";
+  detail: string | null;
+  source: "next" | "python";
+  toolName?: string | null;
+}
+
 export interface PythonChatRequest {
   userId: string;
   analysisId: string;
