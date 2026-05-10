@@ -1,11 +1,11 @@
 import re
 from collections.abc import Iterable, Sequence
-from typing import Annotated, Any, Protocol, TypedDict, cast
+from typing import Any, Literal, Protocol, cast
 
 from pydantic import SecretStr
 
 from app.core.exceptions import ServiceUnavailableError
-from app.models.chat import ChatContext, ChatMemoryItem
+from app.models.chat import ChatContext, ChatMemoryItem, ChatPhase
 
 
 def _read_text_content(content: object) -> str:
@@ -94,20 +94,12 @@ class LangGraphChatModelAdapter:
         if not self.is_configured():
             return None
 
-        graph, initial_state = self._build_graph(
+        answer, _phase_events = self._run_agent(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             context=context,
+            include_tool_phases=False,
         )
-
-        try:
-            final_state = graph.invoke(initial_state, config={"recursion_limit": 6})
-        except Exception as exc:
-            raise ServiceUnavailableError(
-                "The LangGraph agent request failed."
-            ) from exc
-
-        answer = self._extract_final_text(final_state.get("messages", []))
         if not answer:
             raise ServiceUnavailableError(
                 "The LangGraph agent returned an empty final answer."
@@ -120,19 +112,25 @@ class LangGraphChatModelAdapter:
         system_prompt: str,
         user_prompt: str,
         context: ChatContext,
-    ) -> Iterable[str] | None:
-        answer = self.generate(system_prompt, user_prompt, context)
+    ) -> Iterable[object] | None:
+        answer, phase_events = self._run_agent(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            context=context,
+            include_tool_phases=True,
+        )
         if not answer:
             return None
 
-        return self._chunk_text(answer)
+        return [*phase_events, *self._chunk_text(answer)]
 
-    def _build_graph(
+    def _run_agent(
         self,
         *,
         system_prompt: str,
         user_prompt: str,
         context: ChatContext,
+        include_tool_phases: bool,
     ):
         (
             ChatOpenAI,
@@ -157,74 +155,83 @@ class LangGraphChatModelAdapter:
         tools = self._build_tools(context, tool)
         tools_by_name = {tool_instance.name: tool_instance for tool_instance in tools}
         llm_with_tools = model.bind_tools(tools)
-
-        class AgentState(TypedDict):
-            messages: Annotated[list[Any], add_messages]
-
-        def assistant(state: AgentState):
-            return {
-                "messages": [
-                    llm_with_tools.invoke(state["messages"]),
-                ]
-            }
-
-        def run_tools(state: AgentState):
-            last_message = state["messages"][-1]
-            tool_calls = getattr(last_message, "tool_calls", []) or []
-            tool_messages: list[Any] = []
-
-            for tool_call in tool_calls:
-                if not isinstance(tool_call, dict):
-                    continue
-
-                tool_name = tool_call.get("name")
-                tool_instance = tools_by_name.get(tool_name)
-                if not tool_instance:
-                    continue
-
-                raw_args = tool_call.get("args")
-                tool_args = raw_args if isinstance(raw_args, dict) else {}
-                result = tool_instance.invoke(tool_args)
-                tool_messages.append(
-                    ToolMessage(
-                        content=result,
-                        tool_call_id=str(tool_call.get("id", tool_name or "tool")),
-                        name=tool_name,
-                    )
+        _ = StateGraph
+        _ = START
+        _ = add_messages
+        phase_events: list[dict[str, object]] = []
+        messages: list[Any] = [
+            SystemMessage(
+                content=(
+                    f"{system_prompt}\n\n"
+                    "You are running inside a LangGraph tool-calling loop. "
+                    "Use tools when the user asks for timestamps, evidence, structure, "
+                    "or when the answer would benefit from inspecting the current analysis context. "
+                    "Do not invent transcript evidence. If a tool returns insufficient information, "
+                    "say what is missing."
                 )
+            ),
+            HumanMessage(content=user_prompt),
+        ]
 
-            return {"messages": tool_messages}
+        try:
+            for tool_index in range(6):
+                assistant_message = llm_with_tools.invoke(messages)
+                messages.append(assistant_message)
+                tool_calls = getattr(assistant_message, "tool_calls", []) or []
+                if not tool_calls:
+                    break
 
-        def route_after_assistant(state: AgentState):
-            last_message = state["messages"][-1]
-            tool_calls = getattr(last_message, "tool_calls", []) or []
-            return "tools" if tool_calls else "__end__"
+                for inner_index, tool_call in enumerate(tool_calls, start=1):
+                    if not isinstance(tool_call, dict):
+                        continue
 
-        workflow = StateGraph(AgentState)
-        workflow.add_node("assistant", assistant)
-        workflow.add_node("tools", run_tools)
-        workflow.add_edge(START, "assistant")
-        workflow.add_conditional_edges("assistant", route_after_assistant)
-        workflow.add_edge("tools", "assistant")
+                    tool_name = tool_call.get("name")
+                    tool_instance = tools_by_name.get(tool_name)
+                    if not tool_instance:
+                        continue
 
-        graph = workflow.compile()
-        initial_state = {
-            "messages": [
-                SystemMessage(
-                    content=(
-                        f"{system_prompt}\n\n"
-                        "You are running inside a LangGraph tool-calling loop. "
-                        "Use tools when the user asks for timestamps, evidence, structure, "
-                        "or when the answer would benefit from inspecting the current analysis context. "
-                        "Do not invent transcript evidence. If a tool returns insufficient information, "
-                        "say what is missing."
+                    phase_id = self._build_tool_phase_id(
+                        tool_name,
+                        tool_index,
+                        inner_index,
                     )
-                ),
-                HumanMessage(content=user_prompt),
-            ]
-        }
+                    if include_tool_phases:
+                        phase_events.append(
+                            self._build_tool_phase_event(
+                                phase_id,
+                                tool_name,
+                                "active",
+                                "Inspecting grounded context through a LangGraph tool.",
+                            )
+                        )
 
-        return graph, initial_state
+                    raw_args = tool_call.get("args")
+                    tool_args = raw_args if isinstance(raw_args, dict) else {}
+                    result = tool_instance.invoke(tool_args)
+                    messages.append(
+                        ToolMessage(
+                            content=result,
+                            tool_call_id=str(tool_call.get("id", tool_name or "tool")),
+                            name=tool_name,
+                        )
+                    )
+
+                    if include_tool_phases:
+                        phase_events.append(
+                            self._build_tool_phase_event(
+                                phase_id,
+                                tool_name,
+                                "completed",
+                                self._build_tool_phase_detail(tool_name),
+                            )
+                        )
+        except Exception as exc:
+            raise ServiceUnavailableError(
+                "The LangGraph agent request failed."
+            ) from exc
+
+        answer = self._extract_final_text(messages)
+        return answer, phase_events
 
     def _build_tools(self, context: ChatContext, tool_decorator):
         @tool_decorator
@@ -339,6 +346,74 @@ class LangGraphChatModelAdapter:
             window = start_label or end_label or "No timestamp"
 
         return f"- Chunk {chunk_index} [{window}] {item.content}"
+
+    def _build_tool_phase_id(
+        self,
+        tool_name: object,
+        tool_index: int,
+        inner_index: int,
+    ) -> str:
+        normalized_tool_name = (
+            str(tool_name).strip().lower().replace("_", "-")
+            if isinstance(tool_name, str)
+            else "tool"
+        )
+        return f"python-tool-{normalized_tool_name}-{tool_index}-{inner_index}"
+
+    def _build_tool_phase_event(
+        self,
+        phase_id: str,
+        tool_name: object,
+        status: Literal["active", "completed", "failed"],
+        detail: str,
+    ) -> dict[str, object]:
+        display_name = self._read_tool_display_name(tool_name)
+        phase = ChatPhase(
+            id=phase_id,
+            label=self._read_tool_phase_label(tool_name),
+            status=status,
+            detail=detail,
+            source="python",
+            tool_name=display_name,
+        )
+
+        return {
+            "type": "phase",
+            "phase": phase.model_dump(by_alias=True),
+        }
+
+    def _read_tool_phase_label(self, tool_name: object) -> str:
+        if tool_name == "inspect_analysis_summary":
+            return "Inspecting summary context"
+        if tool_name == "inspect_outline":
+            return "Inspecting outline context"
+        if tool_name == "inspect_memory":
+            return "Inspecting memory context"
+        if tool_name == "search_retrieved_chunks":
+            return "Inspecting transcript evidence"
+        return "Inspecting LangGraph tool context"
+
+    def _read_tool_display_name(self, tool_name: object) -> str:
+        if tool_name == "inspect_analysis_summary":
+            return "Summary inspection"
+        if tool_name == "inspect_outline":
+            return "Outline inspection"
+        if tool_name == "inspect_memory":
+            return "Memory inspection"
+        if tool_name == "search_retrieved_chunks":
+            return "Retrieved chunk search"
+        return "LangGraph tool"
+
+    def _build_tool_phase_detail(self, tool_name: object) -> str:
+        if tool_name == "inspect_analysis_summary":
+            return "Reviewed the summary, key points, and rolling conversation summary."
+        if tool_name == "inspect_outline":
+            return "Reviewed the structured outline and available timestamps."
+        if tool_name == "inspect_memory":
+            return "Reviewed durable memory items that could affect the answer."
+        if tool_name == "search_retrieved_chunks":
+            return "Checked the retrieved transcript chunks for grounded evidence."
+        return "Inspected additional LangGraph tool context for the answer."
 
     def _extract_final_text(self, messages: Sequence[object]) -> str:
         for message in reversed(messages):

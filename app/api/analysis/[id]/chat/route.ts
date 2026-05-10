@@ -11,14 +11,18 @@ import {
   logPipelineEvent,
   previewText,
 } from "@/lib/analysis/debug";
+import { streamAnalysisChatEvents } from "@/lib/analysis/chat-stream";
 import { encodeSseEvent, readSseEvents } from "@/lib/analysis/sse";
 import {
   finalizeAnalysisChatTurn,
-  prepareAnalysisChatTurn,
+  prepareAnalysisChatTurnStream,
 } from "@/lib/analysis/services/chat";
 import type { ChatInput } from "@/lib/analysis/types";
 import { requestPythonChatAnswerStream } from "@/lib/python-backend/client";
-import type { PythonChatResponse } from "@/lib/python-backend/types";
+import type {
+  PythonChatRequest,
+  PythonChatResponse,
+} from "@/lib/python-backend/types";
 
 export const runtime = "nodejs";
 
@@ -47,93 +51,85 @@ export async function POST(
       message: previewText(body.message ?? null),
     });
 
-    const preparedTurn = await prepareAnalysisChatTurn(id, {
-      message: body.message ?? "",
-    });
-    logPipelineEvent("next.chat.route", "prepared_chat_turn", {
-      traceId,
-      analysisId: id,
-      recentMessageCount: preparedTurn.pythonRequest.recentMessages.length,
-      memoryItemCount: preparedTurn.pythonRequest.memoryItems.length,
-      storedMemoryItemCount: preparedTurn.pythonRequest.storedMemoryItems.length,
-      transcriptExcerpt: previewText(preparedTurn.pythonRequest.transcriptExcerpt, 320),
-    });
-    const pythonResponse = await requestPythonChatAnswerStream(
-      preparedTurn.pythonRequest,
-    );
-
     const stream = new ReadableStream({
       async start(controller) {
-        let finalPayload: PythonChatResponse | null = null;
+        for await (const event of streamAnalysisChatEvents({
+          id,
+          input: {
+            message: body.message ?? "",
+          },
+          prepareTurn: async function* (analysisId, chatInput) {
+            for await (const prepareEvent of prepareAnalysisChatTurnStream(
+              analysisId,
+              chatInput,
+            )) {
+              if (prepareEvent.type === "prepared") {
+                logPipelineEvent("next.chat.route", "prepared_chat_turn", {
+                  traceId,
+                  analysisId,
+                  recentMessageCount:
+                    prepareEvent.preparedTurn.pythonRequest.recentMessages.length,
+                  memoryItemCount:
+                    prepareEvent.preparedTurn.pythonRequest.memoryItems.length,
+                  storedMemoryItemCount:
+                    prepareEvent.preparedTurn.pythonRequest.storedMemoryItems.length,
+                  transcriptExcerpt: previewText(
+                    prepareEvent.preparedTurn.pythonRequest.transcriptExcerpt,
+                    320,
+                  ),
+                });
+              }
 
-        try {
-          for await (const event of readSseEvents(pythonResponse.body!)) {
-            if (event.event === "token") {
-              controller.enqueue(encodeChunk("token", {
-                content: event.data,
-              }));
-              continue;
+              yield prepareEvent;
             }
-
-            if (event.event === "final") {
-              finalPayload = JSON.parse(event.data) as PythonChatResponse;
-              continue;
-            }
-
-            if (event.event === "error") {
-              const message = readStreamErrorMessage(event.data);
-              controller.enqueue(encodeChunk("error", { message }));
-              controller.close();
-              return;
-            }
-          }
-
-          if (!finalPayload) {
-            controller.enqueue(
-              encodeChunk("error", {
-                message: "The Python chat stream ended before sending the final payload.",
-              }),
-            );
-            controller.close();
-            return;
-          }
-
-          const analysis = await finalizeAnalysisChatTurn(
+          },
+          requestPythonStream: async (pythonRequest: PythonChatRequest) => {
+            const response = await requestPythonChatAnswerStream(pythonRequest);
+            logPipelineEvent("next.chat.route", "python_stream_connected", {
+              traceId,
+              analysisId: id,
+            });
+            return response;
+          },
+          finalizeTurn: async (
             preparedTurn,
-            finalPayload,
-          );
-          logPipelineEvent("next.chat.route", "chat_turn_finalized", {
-            traceId,
-            analysisId: id,
-            answer: previewText(finalPayload.answer, 320),
-            memoryUpdateCount: finalPayload.memoryUpdates.length,
-            memoryHitCount: finalPayload.memoryHits.length,
-            conversationSummary: previewText(
-              finalPayload.conversationSummary,
-              240,
-            ),
-          });
-          controller.enqueue(encodeChunk("done", { analysis }));
-          controller.close();
-        } catch (error) {
-          logPipelineEvent("next.chat.route", "chat_stream_failed", {
-            traceId,
-            analysisId: id,
-            message: getPublicErrorMessage(error),
-          });
-          controller.enqueue(
-            encodeChunk("error", {
-              message: getPublicErrorMessage(error),
-            }),
-          );
-          controller.close();
+            finalPayload: PythonChatResponse,
+          ) => {
+            const analysis = await finalizeAnalysisChatTurn(
+              preparedTurn,
+              finalPayload,
+            );
+            logPipelineEvent("next.chat.route", "chat_turn_finalized", {
+              traceId,
+              analysisId: id,
+              answer: previewText(finalPayload.answer, 320),
+              memoryUpdateCount: finalPayload.memoryUpdates.length,
+              memoryHitCount: finalPayload.memoryHits.length,
+              conversationSummary: previewText(
+                finalPayload.conversationSummary,
+                240,
+              ),
+            });
+            return analysis;
+          },
+          readSseEvents,
+          parsePythonFinal: (data) => JSON.parse(data) as PythonChatResponse,
+          readStreamErrorMessage,
+          getErrorMessage: (error) => {
+            const message = getPublicErrorMessage(error);
+            logPipelineEvent("next.chat.route", "chat_stream_failed", {
+              traceId,
+              analysisId: id,
+              message,
+            });
+            return message;
+          },
+        })) {
+          controller.enqueue(encodeChunk(event.event, event.data));
         }
-      },
-    });
 
-    logPipelineEvent("next.chat.route", "python_stream_connected", {
-      traceId,
-      analysisId: id,
+        controller.close();
+      },
     });
 
     return new Response(stream, {

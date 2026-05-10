@@ -3,9 +3,16 @@
 import type { ReactNode } from "react";
 import { startTransition, useState } from "react";
 
+import {
+  applyThinkingPhaseUpdate,
+  buildThinkingSummary,
+  createThinkingTimelineState,
+  describeThinkingPhaseMotion,
+} from "@/components/analysis/thinkingTimeline";
 import { readSseEvents } from "@/lib/analysis/sse";
 import type {
   AnalysisChatCitation,
+  AnalysisChatPhase,
   AnalysisPublicTask,
 } from "@/lib/analysis/types";
 import {
@@ -103,42 +110,98 @@ function LatestReplyCitations({
 }
 
 function ThinkingReplyPlaceholder({
+  phases,
+  isExpanded,
+  onToggle,
   children,
 }: {
+  phases: AnalysisChatPhase[];
+  isExpanded: boolean;
+  onToggle: () => void;
   children?: ReactNode;
 }) {
+  const summary = buildThinkingSummary(phases);
+
   return (
     <div
       aria-live="polite"
-      className="rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
+      className="thinking-panel rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(23,12,3,0.55)] p-4"
     >
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden="true"
-          className="thinking-orb h-2.5 w-2.5 rounded-full bg-[color:var(--primary-strong)]"
-        />
-        <div className="min-w-0">
-          <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--primary-strong)]">
-            Thinking
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-7 text-[color:var(--text-muted)]">
-            <span className="thinking-text">
-              Thinking through the transcript and assembling an answer
-            </span>
-            <span aria-hidden="true" className="thinking-dots">
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-            </span>
+      <button
+        className="thinking-summary-toggle progress-sheen flex w-full items-start justify-between gap-4 text-left"
+        onClick={onToggle}
+        type="button"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="thinking-orb mt-1 h-2.5 w-2.5 rounded-full bg-[color:var(--primary-strong)]"
+          />
+          <div className="min-w-0">
+            <p className="font-headline text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--primary-strong)]">
+              {summary.title}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-7 text-[color:var(--text-muted)]">
+              <span className="thinking-text">{summary.detail}</span>
+              <span aria-hidden="true" className="thinking-dots">
+                <span className="thinking-dot" />
+                <span className="thinking-dot" />
+                <span className="thinking-dot" />
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.5)]">
+              {summary.completedCount}/{summary.totalCount} stages completed
+            </p>
           </div>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.5)]">
-            Streaming reply
-          </p>
         </div>
-      </div>
+        <span className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.62)]">
+          <span>{isExpanded ? "Hide Steps" : "Show Steps"}</span>
+          <span
+            aria-hidden="true"
+            className={`thinking-chevron material-symbols-outlined ${isExpanded ? "is-expanded" : ""}`}
+          >
+            expand_more
+          </span>
+        </span>
+      </button>
+      {isExpanded ? (
+        <div className="thinking-phase-list mt-4 space-y-3 border-t border-[color:rgba(88,66,53,0.16)] pt-4">
+          {phases.map((phase, index) => {
+            const motion = describeThinkingPhaseMotion(phase, index);
+
+            return (
+              <div
+                key={phase.id}
+                className={`thinking-phase-card rounded-2xl border border-[color:rgba(88,66,53,0.16)] bg-[color:rgba(29,17,6,0.42)] px-4 py-3.5 pl-8 ${motion.statusClassName} ${motion.shouldPulse ? "thinking-phase-pulse" : ""} ${motion.shouldSheen ? "progress-sheen" : ""}`}
+                style={{ animationDelay: `${motion.delayMs}ms` }}
+              >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-primary/25 bg-[color:rgba(255,127,0,0.08)] px-2.5 py-1 font-headline text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  {phase.status}
+                </span>
+                <span className="font-headline text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                  {phase.label}
+                </span>
+                {phase.toolName ? (
+                  <span className="text-[11px] uppercase tracking-[0.18em] text-[color:rgba(240,220,204,0.56)]">
+                    {phase.toolName}
+                  </span>
+                ) : null}
+              </div>
+              {phase.detail ? (
+                <p className="mt-2 text-sm leading-6 text-[color:var(--text-muted)]">
+                  {phase.detail}
+                </p>
+              ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {children ? (
-        <div className="mt-4 border-t border-[color:rgba(88,66,53,0.16)] pt-4 text-sm leading-7 text-[color:var(--text-muted)]">
-          {children}
+        <div className="typewriter-shell mt-4 border-t border-[color:rgba(88,66,53,0.16)] pt-4 text-sm leading-7 text-[color:var(--text-muted)]">
+          <span>{children}</span>
+          <span aria-hidden="true" className="typewriter-cursor ml-1 inline-block" />
         </div>
       ) : null}
     </div>
@@ -156,6 +219,10 @@ export default function AnalysisConversation({
     null,
   );
   const [streamedAssistantAnswer, setStreamedAssistantAnswer] = useState("");
+  const [thinkingTimeline, setThinkingTimeline] = useState(
+    createThinkingTimelineState(),
+  );
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
 
   const canContinueChat =
     analysis.status === "completed" && Boolean(analysis.result);
@@ -187,6 +254,8 @@ export default function AnalysisConversation({
     setChatError(null);
     setPendingUserMessage(nextMessage);
     setStreamedAssistantAnswer("");
+    setThinkingTimeline(createThinkingTimelineState());
+    setIsThinkingExpanded(false);
     try {
       const response = await fetch(`/api/analysis/${analysis.id}/chat`, {
         cache: "no-store",
@@ -225,6 +294,17 @@ export default function AnalysisConversation({
       let nextAnalysis: AnalysisPublicTask | null = null;
 
       for await (const event of readSseEvents(response.body)) {
+        if (event.event === "phase") {
+          const payload = parseStreamEvent<AnalysisChatPhase>(event.data);
+          if (payload?.id) {
+            setThinkingTimeline((current) =>
+              applyThinkingPhaseUpdate(current, payload),
+            );
+          }
+
+          continue;
+        }
+
         if (event.event === "token") {
           const payload = parseStreamEvent<{ content?: string }>(event.data);
           const content = payload?.content ?? "";
@@ -259,10 +339,14 @@ export default function AnalysisConversation({
         setDraft("");
         setPendingUserMessage(null);
         setStreamedAssistantAnswer("");
+        setThinkingTimeline(createThinkingTimelineState());
+        setIsThinkingExpanded(false);
       });
     } catch (error) {
       setPendingUserMessage(null);
       setStreamedAssistantAnswer("");
+      setThinkingTimeline(createThinkingTimelineState());
+      setIsThinkingExpanded(false);
       setChatError(
         error instanceof Error
           ? error.message
@@ -325,7 +409,11 @@ export default function AnalysisConversation({
       ) : null}
 
       {isPending ? (
-        <ThinkingReplyPlaceholder>
+        <ThinkingReplyPlaceholder
+          phases={thinkingTimeline.phases}
+          isExpanded={isThinkingExpanded}
+          onToggle={() => setIsThinkingExpanded((current) => !current)}
+        >
           {streamedAssistantAnswer || null}
         </ThinkingReplyPlaceholder>
       ) : null}

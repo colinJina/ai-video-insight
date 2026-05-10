@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterable
+from typing import Literal, TypedDict, cast
 from urllib import error, request
 
 from app.core.config import get_settings
@@ -9,6 +10,20 @@ from app.core.pipeline_debug import log_pipeline_event, preview_text
 from app.models.chat import ChatContext, ChatMemoryItem, ChatMessage
 from app.services.chat_langgraph_adapter import LangGraphChatModelAdapter
 from app.services.chat_langchain_adapter import LangChainChatModelAdapter
+
+
+class ChatPhasePayload(TypedDict):
+    id: str
+    label: str
+    status: Literal["active", "completed", "failed"]
+    detail: str | None
+    source: Literal["next", "python"]
+    toolName: str | None
+
+
+class ChatPhaseChunk(TypedDict):
+    type: Literal["phase"]
+    phase: ChatPhasePayload
 
 
 def _resolve_chat_completions_url(base_url: str) -> str:
@@ -236,7 +251,9 @@ class ChatModelGateway:
 
         return answer
 
-    def generate_stream(self, context: ChatContext) -> Iterable[str] | None:
+    def generate_stream(
+        self, context: ChatContext
+    ) -> Iterable[str | ChatPhaseChunk] | None:
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(context)
         log_pipeline_event(
@@ -256,7 +273,7 @@ class ChatModelGateway:
                 user_prompt,
                 context,
             )
-            return chunks if chunks else None
+            return cast(Iterable[str | ChatPhaseChunk] | None, chunks if chunks else None)
 
         if self._uses_langchain_adapter():
             chunks = self.langchain_adapter.generate_stream(

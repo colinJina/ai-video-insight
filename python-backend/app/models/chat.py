@@ -46,6 +46,25 @@ class ChatMemoryItem(ChatModel):
     )
 
 
+class ChatPhase(ChatModel):
+    id: str = Field(min_length=1, description="Stable machine-readable phase identifier.")
+    label: str = Field(min_length=1, description="User-facing phase label.")
+    status: Literal["active", "completed", "failed"] = Field(
+        description="Whether the phase is active, completed, or failed."
+    )
+    detail: str | None = Field(
+        default=None,
+        description="Short user-facing detail about the current phase.",
+    )
+    source: Literal["next", "python"] = Field(
+        description="Which runtime emitted the phase update.",
+    )
+    tool_name: str | None = Field(
+        default=None,
+        description="Optional user-facing tool label for tool-driven phases.",
+    )
+
+
 class ChatRequest(ChatModel):
     user_id: str | None = Field(default=None, description="Optional user identifier.")
     analysis_id: str | None = Field(
